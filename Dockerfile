@@ -11,8 +11,7 @@ COPY entrypoint.sh .
 
 RUN chmod +x entrypoint.sh
 
-ENV GAS_BASE_URL=https://fg-gas-backend.dev.cdp-int.defra.cloud
-ENV SCENARIO=gas-frps-claims-journey
+ENV SCENARIO=frps-full-journey-v2
 ENV S3_ENDPOINT=https://s3.eu-west-2.amazonaws.com
 
 USER k6
