@@ -6,9 +6,11 @@
  *
  * No external URL imports — fully self-contained for CDP (no outbound internet).
  */
+var REPORTS_DIR = __ENV.REPORTS_DIR || 'reports';
+
 export const handleSummary = (data) => ({
-  'reports/index.html': buildHtmlReport(data),
-  'reports/summary.json': JSON.stringify(data, null, 2),
+  [REPORTS_DIR + '/index.html']: buildHtmlReport(data),
+  [REPORTS_DIR + '/summary.json']: JSON.stringify(data, null, 2),
   stdout: buildTextSummary(data),
 });
 
