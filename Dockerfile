@@ -11,7 +11,7 @@ COPY entrypoint.sh .
 
 RUN chmod +x entrypoint.sh
 
-RUN mkdir -p /app/reports && chown -R k6:k6 /app/reports
+RUN mkdir -p /app/reports/frps /app/reports/wmp && chown -R k6:k6 /app/reports
 
 ENV SCENARIO=frps-full-journey-v2
 ENV CW_FRONTEND_BASE_URL=fg-cw-frontend.perf-test.cdp-int.defra.cloud
