@@ -3,7 +3,7 @@ set -e
 
 echo "run_id: $RUN_ID in $ENVIRONMENT"
 
-SCENARIO=${SCENARIO:-gas-frps-claims-journey}
+SCENARIO=${SCENARIO:-frps-full-journey-v2}
 SCENARIO_FILE=/app/src/scenarios/${SCENARIO}.js
 REPORTS_DIR=/app/reports
 
