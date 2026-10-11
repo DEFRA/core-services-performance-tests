@@ -1,31 +1,77 @@
-import { textSummary } from 'https://jslib.k6.io/k6-summary/0.0.1/index.js';
-
 /**
  * Generates three outputs:
  *   reports/report.html  — Visual HTML report with per-transaction breakdown (open in browser)
  *   reports/summary.json — Raw JSON metrics (used by CDP portal)
- *   stdout               — Coloured text table (terminal)
+ *   stdout               — Text table summary (terminal)
+ *
+ * No external URL imports — fully self-contained for CDP (no outbound internet).
  */
 export const handleSummary = (data) => ({
   'reports/report.html': buildHtmlReport(data),
   'reports/summary.json': JSON.stringify(data, null, 2),
-  stdout: textSummary(data, { indent: ' ', enableColors: true }),
+  stdout: buildTextSummary(data),
 });
+
+// ── Text summary (stdout) ──────────────────────────────────────────────────────
+
+function buildTextSummary(data) {
+  var metrics = data.metrics || {};
+  var lines = [];
+
+  lines.push('');
+  lines.push('=== k6 Performance Test Summary ===');
+  lines.push('');
+
+  var keys = Object.keys(metrics).sort();
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[i];
+    var m = metrics[key];
+    var vals = m.values || {};
+    var type = m.type;
+
+    var line = '  ' + key;
+
+    if (type === 'trend') {
+      line += ' avg=' + fmtMs(vals.avg)
+        + ' p(90)=' + fmtMs(vals['p(90)'])
+        + ' p(95)=' + fmtMs(vals['p(95)'])
+        + ' p(99)=' + fmtMs(vals['p(99)'])
+        + ' max=' + fmtMs(vals.max);
+    } else if (type === 'rate') {
+      line += ' ' + fmtRate(vals.rate);
+    } else if (type === 'counter') {
+      line += ' ' + (vals.count || 0);
+    } else if (type === 'gauge') {
+      line += ' ' + (vals.value != null ? vals.value : '-');
+    }
+
+    var thresholds = m.thresholds || {};
+    var tKeys = Object.keys(thresholds);
+    for (var t = 0; t < tKeys.length; t++) {
+      line += ' [' + tKeys[t] + ': ' + (thresholds[tKeys[t]].ok ? 'PASS' : 'FAIL') + ']';
+    }
+
+    lines.push(line);
+  }
+
+  lines.push('');
+  return lines.join('\n');
+}
 
 // ── HTML report builder ────────────────────────────────────────────────────────
 
-function ms(v) {
+function fmtMs(v) {
   return v == null ? '-' : Math.round(v) + ' ms';
 }
 
-function rate(v) {
+function fmtRate(v) {
   return v == null ? '-' : (v * 100).toFixed(2) + '%';
 }
 
 function buildHtmlReport(data) {
   var metrics = data.metrics || {};
 
-  // Collect all http_req_duration sub-metrics (named transactions)
+  // Collect named transactions (http_req_duration sub-metrics with {name:...} tag)
   var transactions = [];
   var keys = Object.keys(metrics);
   for (var i = 0; i < keys.length; i++) {
@@ -34,7 +80,6 @@ function buildHtmlReport(data) {
       var name = key.replace('http_req_duration{name:', '').replace('}', '');
       var m = metrics[key];
       var vals = m.values || {};
-      // Check threshold pass/fail
       var thresholds = m.thresholds || {};
       var tKeys = Object.keys(thresholds);
       var passed = true;
@@ -86,13 +131,13 @@ function buildHtmlReport(data) {
     txRows += '<tr class="' + rowClass + '">'
       + '<td>' + t2.name + '</td>'
       + '<td>' + (t2.count || '-') + '</td>'
-      + '<td>' + ms(t2.avg) + '</td>'
-      + '<td>' + ms(t2.min) + '</td>'
-      + '<td>' + ms(t2.med) + '</td>'
-      + '<td>' + ms(t2.p90) + '</td>'
-      + '<td>' + ms(t2.p95) + '</td>'
-      + '<td>' + ms(t2.p99) + '</td>'
-      + '<td>' + ms(t2.max) + '</td>'
+      + '<td>' + fmtMs(t2.avg) + '</td>'
+      + '<td>' + fmtMs(t2.min) + '</td>'
+      + '<td>' + fmtMs(t2.med) + '</td>'
+      + '<td>' + fmtMs(t2.p90) + '</td>'
+      + '<td>' + fmtMs(t2.p95) + '</td>'
+      + '<td>' + fmtMs(t2.p99) + '</td>'
+      + '<td>' + fmtMs(t2.max) + '</td>'
       + '<td>' + (t2.hasThreshold ? (t2.passed ? '✓' : '✗') : '') + '</td>'
       + '</tr>';
   }
@@ -122,12 +167,12 @@ function buildHtmlReport(data) {
     + '<div class="stat-grid">'
     + '<div class="stat"><div class="val">' + (iters.count || '-') + '</div><div class="lbl">Iterations</div></div>'
     + '<div class="stat"><div class="val">' + (reqs.count || '-') + '</div><div class="lbl">HTTP Requests</div></div>'
-    + '<div class="stat"><div class="val">' + rate(failed.rate) + '</div><div class="lbl">Error Rate</div></div>'
+    + '<div class="stat"><div class="val">' + fmtRate(failed.rate) + '</div><div class="lbl">Error Rate</div></div>'
     + '<div class="stat"><div class="val">' + (vusMax.max || '-') + '</div><div class="lbl">Peak VUs</div></div>'
-    + '<div class="stat"><div class="val">' + ms(dur.avg) + '</div><div class="lbl">Avg Response</div></div>'
-    + '<div class="stat"><div class="val">' + ms(dur['p(95)']) + '</div><div class="lbl">p95 Response</div></div>'
-    + '<div class="stat"><div class="val">' + ms(dur['p(99)']) + '</div><div class="lbl">p99 Response</div></div>'
-    + '<div class="stat"><div class="val">' + ms(dur.max) + '</div><div class="lbl">Max Response</div></div>'
+    + '<div class="stat"><div class="val">' + fmtMs(dur.avg) + '</div><div class="lbl">Avg Response</div></div>'
+    + '<div class="stat"><div class="val">' + fmtMs(dur['p(95)']) + '</div><div class="lbl">p95 Response</div></div>'
+    + '<div class="stat"><div class="val">' + fmtMs(dur['p(99)']) + '</div><div class="lbl">p99 Response</div></div>'
+    + '<div class="stat"><div class="val">' + fmtMs(dur.max) + '</div><div class="lbl">Max Response</div></div>'
     + '</div>'
 
     + '<h2>Transactions</h2>'
@@ -135,7 +180,7 @@ function buildHtmlReport(data) {
     + '<th>Transaction</th><th>Count</th><th>Avg</th><th>Min</th><th>Med</th>'
     + '<th>p90</th><th>p95</th><th>p99</th><th>Max</th><th>Threshold</th>'
     + '</tr></thead><tbody>'
-    + (txRows || '<tr><td colspan="10">No named transactions found — add per-transaction thresholds to options.</td></tr>')
+    + (txRows || '<tr><td colspan="10">No named transactions found.</td></tr>')
     + '</tbody></table>'
 
     + '<h2>All Thresholds</h2>'
