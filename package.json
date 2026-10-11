@@ -1,0 +1,14 @@
+{
+  "name": "core-services-performance-tests",
+  "version": "1.0.0",
+  "description": "K6 performance tests for farming grants core services",
+  "type": "module",
+  "scripts": {
+    "generate-cookies": "node scripts/generate-session-cookies.js",
+    "generate-cookies:frps": "OUTPUT_FILE=src/data/frps-session-cookies.csv node scripts/generate-session-cookies.js",
+    "generate-cookies:wmp": "OUTPUT_FILE=src/data/wmp-session-cookies.csv node scripts/generate-session-cookies.js"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0"
+  }
+}
