@@ -429,8 +429,8 @@ export default function () {
   console.log(`[VU=${__VU}] Phase 1 complete: application submitted clientRef=${clientRef}`);
 
   // Simulate application sitting in the queue before a caseworker picks it up
-  console.log(`[VU=${__VU}] Think time: application submitted — waiting 120s before caseworker picks it up`);
-  sleep(120);
+  console.log(`[VU=${__VU}] Think time: application submitted — waiting 10s before caseworker picks it up`);
+  sleep(10);
 
   // ── Phase 2: Wait for case to appear in CW (async GAS→CW via SNS/SQS) ──────
   console.log(`[VU=${__VU}] Phase 2: Polling CW for case (timeout=${CASE_POLL_TIMEOUT_S}s interval=${CASE_POLL_INTERVAL_S}s)`);
@@ -447,7 +447,7 @@ export default function () {
     headers: cwBrowserHeaders(),
     tags: { name: 'GetCase' },
   }));
-  sleep(5);
+  sleep(2);
 
   // ── Phase 4: Assign case to caseworker ──────────────────────────────────────
   console.log(`[VU=${__VU}] Phase 4: Assigning case ${caseId} to user ${ASSIGNED_USER_ID}`);
@@ -457,7 +457,7 @@ export default function () {
     headers: cwBrowserHeaders(),
     tags: { name: 'GetAssignUser' },
   }));
-  sleep(5);
+  sleep(2);
 
   const postAssignRes = http.post(
     `${CW_FRONTEND_URL}/cases/assign-user`,
@@ -472,13 +472,13 @@ export default function () {
   if (postAssignRes.status !== 302) {
     console.warn(`[VU=${__VU}] AssignUser POST returned ${postAssignRes.status} (expected 302)`);
   }
-  sleep(5);
+  sleep(2);
 
   logStep('GetCaseAfterAssign', http.get(`${CW_FRONTEND_URL}/cases/${caseId}`, {
     headers: cwBrowserHeaders(),
     tags: { name: 'GetCaseAfterAssign' },
   }));
-  sleep(10);
+  sleep(3);
 
   // ── Phase 5: Start review ────────────────────────────────────────────────────
   console.log(`[VU=${__VU}] Phase 5: Starting review for case ${caseId}`);
@@ -497,41 +497,41 @@ export default function () {
     return;
   }
   console.log(`[VU=${__VU}] Phase 5 complete: START_REVIEW accepted`);
-  sleep(10);
+  sleep(3);
 
   logStep('GetCaseAfterStartReview', http.get(`${CW_FRONTEND_URL}/cases/${caseId}`, {
     headers: cwBrowserHeaders(),
     tags: { name: 'GetCaseAfterStartReview' },
   }));
-  sleep(10);
+  sleep(3);
 
   // ── Phase 6: Manual review tasks ─────────────────────────────────────────────
   console.log(`[VU=${__VU}] Phase 6: Completing manual review tasks for case ${caseId}`);
 
   completeManualTask(caseId, 'CHECK_CUSTOMER_DETAILS', 'Check customer details');
-  sleep(15);
+  sleep(3);
   http.get(`${CW_FRONTEND_URL}/cases/${caseId}`, { headers: cwBrowserHeaders(), tags: { name: 'GetCaseAfterCustDetails' } });
-  sleep(10);
+  sleep(2);
 
   completeManualTask(caseId, 'REVIEW_LAND_RULES', 'Review land parcel rule checks');
-  sleep(15);
+  sleep(3);
   http.get(`${CW_FRONTEND_URL}/cases/${caseId}`, { headers: cwBrowserHeaders(), tags: { name: 'GetCaseAfterLandRules' } });
-  sleep(10);
+  sleep(2);
 
   completeManualTask(caseId, 'SSSI_CONSENT_REQUESTED', 'Check notice of planned activity for SSSI has been requested');
-  sleep(15);
+  sleep(3);
   http.get(`${CW_FRONTEND_URL}/cases/${caseId}`, { headers: cwBrowserHeaders(), tags: { name: 'GetCaseAfterSSSI' } });
-  sleep(10);
+  sleep(2);
 
   completeManualTask(caseId, 'PAYMENT_AMOUNT_CHECK', 'Check payment amount');
-  sleep(15);
+  sleep(3);
   http.get(`${CW_FRONTEND_URL}/cases/${caseId}`, { headers: cwBrowserHeaders(), tags: { name: 'GetCaseAfterPaymentCheck' } });
-  sleep(10);
+  sleep(2);
 
   completeManualTask(caseId, 'REVIEW_SCHEME_BUDGET', 'Review scheme budget as a finance officer');
-  sleep(15);
+  sleep(3);
   http.get(`${CW_FRONTEND_URL}/cases/${caseId}`, { headers: cwBrowserHeaders(), tags: { name: 'GetCaseAfterSchemeBudget' } });
-  sleep(10);
+  sleep(2);
 
   // ── Phase 7: Approve application ─────────────────────────────────────────────
   console.log(`[VU=${__VU}] Phase 7: Approving application for case ${caseId}`);
@@ -548,30 +548,30 @@ export default function () {
   if (approveRes.status !== 302) {
     console.warn(`[VU=${__VU}] APPROVE_APPLICATION returned ${approveRes.status} (expected 302)`);
   }
-  sleep(10);
+  sleep(3);
 
   http.get(`${CW_FRONTEND_URL}/cases/${caseId}`, {
     headers: cwBrowserHeaders(),
     tags: { name: 'GetCaseAfterApproval' },
   });
-  sleep(10);
+  sleep(3);
 
   // ── Phase 8: Draft agreement review tasks ─────────────────────────────────────
   // Agreement has been generated — simulate it sitting there before caseworker reviews it
-  console.log(`[VU=${__VU}] Think time: agreement generated — waiting 120s before caseworker reviews it`);
-  sleep(120);
+  console.log(`[VU=${__VU}] Think time: agreement generated — waiting 10s before caseworker reviews it`);
+  sleep(10);
 
   console.log(`[VU=${__VU}] Phase 8: Completing draft agreement review tasks for case ${caseId}`);
 
   completeAgreementTask(caseId, 'REVIEW_OFFER_DOCUMENT', 'Check funding agreement');
-  sleep(15);
+  sleep(3);
   http.get(`${CW_FRONTEND_URL}/cases/${caseId}`, { headers: cwBrowserHeaders(), tags: { name: 'GetCaseAfterReviewOffer' } });
-  sleep(10);
+  sleep(2);
 
   completeAgreementTask(caseId, 'OFFER_AGREEMENT', 'Notify customer that agreement is ready');
-  sleep(15);
+  sleep(3);
   http.get(`${CW_FRONTEND_URL}/cases/${caseId}`, { headers: cwBrowserHeaders(), tags: { name: 'GetCaseAfterOfferAgreement' } });
-  sleep(10);
+  sleep(2);
 
   // ── Phase 9: Agreement sent ───────────────────────────────────────────────────
   console.log(`[VU=${__VU}] Phase 9: Sending agreement for case ${caseId}`);
@@ -588,25 +588,25 @@ export default function () {
   if (agreementSentRes.status !== 302) {
     console.warn(`[VU=${__VU}] AGREEMENT_SENT returned ${agreementSentRes.status} (expected 302)`);
   }
-  sleep(10);
+  sleep(3);
 
   http.get(`${CW_FRONTEND_URL}/cases/${caseId}`, {
     headers: cwBrowserHeaders(),
     tags: { name: 'GetCaseAfterAgreementSent' },
   });
-  sleep(10);
+  sleep(2);
 
   // ── Phase 10: Browse case tabs ────────────────────────────────────────────────
   console.log(`[VU=${__VU}] Phase 10: Browsing case tabs for case ${caseId}`);
 
   http.get(`${CW_FRONTEND_URL}/cases/${caseId}/case-details`, { headers: cwBrowserHeaders(), tags: { name: 'GetCaseDetails' } });
-  sleep(3);
+  sleep(2);
   http.get(`${CW_FRONTEND_URL}/cases/${caseId}/calculations`, { headers: cwBrowserHeaders(), tags: { name: 'GetCalculations' } });
-  sleep(3);
+  sleep(2);
   http.get(`${CW_FRONTEND_URL}/cases/${caseId}/timeline`, { headers: cwBrowserHeaders(), tags: { name: 'GetTimeline' } });
-  sleep(3);
+  sleep(2);
   http.get(`${CW_FRONTEND_URL}/cases/${caseId}/notes`, { headers: cwBrowserHeaders(), tags: { name: 'GetNotes' } });
-  sleep(3);
+  sleep(2);
   http.get(`${CW_FRONTEND_URL}/cases/${caseId}/agreements`, { headers: cwBrowserHeaders(), tags: { name: 'GetAgreements' } });
   sleep(1);
 

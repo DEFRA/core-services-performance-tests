@@ -327,8 +327,8 @@ export default function () {
   console.log(`[VU=${__VU}] Phase 1 complete: WMP application submitted clientRef=${clientRef}`);
 
   // Simulate application sitting in the queue before a caseworker picks it up
-  console.log(`[VU=${__VU}] Think time: application submitted — waiting 120s before caseworker picks it up`);
-  sleep(120);
+  console.log(`[VU=${__VU}] Think time: application submitted — waiting 10s before caseworker picks it up`);
+  sleep(10);
 
   // ── Phase 2: Wait for case to appear in CW (async GAS→CW via SNS/SQS) ──────
   console.log(`[VU=${__VU}] Phase 2: Polling CW for case (timeout=${CASE_POLL_TIMEOUT_S}s interval=${CASE_POLL_INTERVAL_S}s)`);
@@ -345,7 +345,7 @@ export default function () {
     headers: cwBrowserHeaders(),
     tags: { name: 'GetCase' },
   }));
-  sleep(5);
+  sleep(2);
 
   // ── Phase 4: Assign case to caseworker ──────────────────────────────────────
   console.log(`[VU=${__VU}] Phase 4: Assigning case ${caseId} to user ${ASSIGNED_USER_ID}`);
@@ -355,7 +355,7 @@ export default function () {
     headers: cwBrowserHeaders(),
     tags: { name: 'GetAssignUser' },
   }));
-  sleep(5);
+  sleep(2);
 
   const postAssignRes = http.post(
     `${CW_FRONTEND_URL}/cases/assign-user`,
@@ -370,13 +370,13 @@ export default function () {
   if (postAssignRes.status !== 302) {
     console.warn(`[VU=${__VU}] AssignUser POST returned ${postAssignRes.status} (expected 302)`);
   }
-  sleep(5);
+  sleep(2);
 
   logStep('GetCaseAfterAssign', http.get(`${CW_FRONTEND_URL}/cases/${caseId}`, {
     headers: cwBrowserHeaders(),
     tags: { name: 'GetCaseAfterAssign' },
   }));
-  sleep(10);
+  sleep(3);
 
   // ── Phase 5: Start review ────────────────────────────────────────────────────
   console.log(`[VU=${__VU}] Phase 5: Starting review for case ${caseId}`);
@@ -395,13 +395,13 @@ export default function () {
     return;
   }
   console.log(`[VU=${__VU}] Phase 5 complete: ACTION_START_REVIEW accepted`);
-  sleep(10);
+  sleep(3);
 
   logStep('GetCaseAfterStartReview', http.get(`${CW_FRONTEND_URL}/cases/${caseId}`, {
     headers: cwBrowserHeaders(),
     tags: { name: 'GetCaseAfterStartReview' },
   }));
-  sleep(10);
+  sleep(3);
 
   // ── Phase 6: Approve application ─────────────────────────────────────────────
   console.log(`[VU=${__VU}] Phase 6: Approving application for case ${caseId}`);
@@ -418,18 +418,18 @@ export default function () {
   if (approveRes.status !== 302) {
     console.warn(`[VU=${__VU}] ACTION_APPROVE_APPLICATION returned ${approveRes.status} (expected 302)`);
   }
-  sleep(10);
+  sleep(3);
 
   logStep('GetCaseAfterApproval', http.get(`${CW_FRONTEND_URL}/cases/${caseId}`, {
     headers: cwBrowserHeaders(),
     tags: { name: 'GetCaseAfterApproval' },
   }));
-  sleep(10);
+  sleep(3);
 
   // ── Phase 7: Agreement delivery task ─────────────────────────────────────────
   // Agreement has been generated — simulate it sitting there before caseworker reviews it
-  console.log(`[VU=${__VU}] Think time: agreement generated — waiting 120s before caseworker reviews it`);
-  sleep(120);
+  console.log(`[VU=${__VU}] Think time: agreement generated — waiting 10s before caseworker reviews it`);
+  sleep(10);
 
   console.log(`[VU=${__VU}] Phase 7: Completing agreement delivery task for case ${caseId}`);
   const taskGroup = 'TASK_GROUP_AGREEMENT_PREPARATION';
@@ -440,7 +440,7 @@ export default function () {
     headers: cwBrowserHeaders(),
     tags: { name: 'GetAgreementDeliveryTask' },
   }));
-  sleep(15);
+  sleep(3);
 
   const postTaskRes = http.post(
     `${CW_FRONTEND_URL}/cases/${caseId}/task-groups/${taskGroup}/tasks/${task}/value`,
@@ -455,13 +455,13 @@ export default function () {
   if (postTaskRes.status !== 302) {
     console.warn(`[VU=${__VU}] ${task} POST returned ${postTaskRes.status} (expected 302)`);
   }
-  sleep(15);
+  sleep(3);
 
   logStep('GetCaseAfterAgreementTask', http.get(`${CW_FRONTEND_URL}/cases/${caseId}`, {
     headers: cwBrowserHeaders(),
     tags: { name: 'GetCaseAfterAgreementTask' },
   }));
-  sleep(10);
+  sleep(2);
 
   // ── Phase 8: Confirm agreement sent ──────────────────────────────────────────
   console.log(`[VU=${__VU}] Phase 8: Confirming agreement sent for case ${caseId}`);
@@ -478,23 +478,23 @@ export default function () {
   if (confirmSentRes.status !== 302) {
     console.warn(`[VU=${__VU}] ACTION_CONFIRM_AGREEMENT_SENT returned ${confirmSentRes.status} (expected 302)`);
   }
-  sleep(10);
+  sleep(3);
 
   logStep('GetCaseAfterConfirmSent', http.get(`${CW_FRONTEND_URL}/cases/${caseId}`, {
     headers: cwBrowserHeaders(),
     tags: { name: 'GetCaseAfterConfirmSent' },
   }));
-  sleep(10);
+  sleep(2);
 
   // ── Phase 9: Browse case tabs ─────────────────────────────────────────────────
   console.log(`[VU=${__VU}] Phase 9: Browsing case tabs for case ${caseId}`);
 
   http.get(`${CW_FRONTEND_URL}/cases/${caseId}/case-details`, { headers: cwBrowserHeaders(), tags: { name: 'GetCaseDetails' } });
-  sleep(3);
+  sleep(2);
   http.get(`${CW_FRONTEND_URL}/cases/${caseId}/agreements`, { headers: cwBrowserHeaders(), tags: { name: 'GetAgreements' } });
-  sleep(3);
+  sleep(2);
   http.get(`${CW_FRONTEND_URL}/cases/${caseId}/timeline`, { headers: cwBrowserHeaders(), tags: { name: 'GetTimeline' } });
-  sleep(3);
+  sleep(2);
   http.get(`${CW_FRONTEND_URL}/cases/${caseId}/notes`, { headers: cwBrowserHeaders(), tags: { name: 'GetNotes' } });
   sleep(1);
 
