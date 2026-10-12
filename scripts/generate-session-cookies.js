@@ -163,8 +163,11 @@ async function main() {
       '--disable-infobars',
       '--window-size=1920,1080',
       '--ignore-certificate-errors',
+      '--disable-http2',
       '--dns-prefetch-disable',
       '--disable-background-networking',
+      '--disable-remote-fonts',
+      '--enable-features=NetworkService,NetworkServiceInProcess',
       '--password-store=basic',
       '--use-mock-keychain',
     ],
@@ -172,18 +175,16 @@ async function main() {
   if (process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH) {
     launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
   }
-  // Playwright's Chromium subprocess does not inherit HTTP_PROXY/HTTPS_PROXY automatically.
-  // Credentials must be extracted from the proxy URL and passed separately.
-  const proxyServer = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
-  if (proxyServer) {
-    const proxyUrl = new URL(proxyServer);
-    launchOptions.proxy = {
-      server: `${proxyUrl.protocol}//${proxyUrl.host}`,
-      bypass: process.env.NO_PROXY || '',
-      username: proxyUrl.username || undefined,
-      password: proxyUrl.password || undefined,
-    };
-  }
+  // In CDP the local squid sidecar runs at localhost:3128 and handles upstream proxy auth.
+  // Fall back to HTTPS_PROXY/HTTP_PROXY if the sidecar address is overridden via env.
+  const proxyServer = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || 'http://localhost:3128';
+  const proxyUrl = new URL(proxyServer);
+  launchOptions.proxy = {
+    server: `${proxyUrl.protocol}//${proxyUrl.host}`,
+    bypass: process.env.NO_PROXY || '.cdp-int.defra.cloud',
+    username: proxyUrl.username || undefined,
+    password: proxyUrl.password || undefined,
+  };
   const browser = await chromium.launch(launchOptions);
 
   const cookies = [];
