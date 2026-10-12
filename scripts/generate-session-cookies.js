@@ -156,7 +156,18 @@ async function main() {
 
   const launchOptions = {
     headless: HEADLESS,
-    args: ['--disable-http2'],
+    args: [
+      '--no-sandbox',
+      '--disable-gpu',
+      '--disable-dev-shm-usage',
+      '--disable-infobars',
+      '--window-size=1920,1080',
+      '--ignore-certificate-errors',
+      '--dns-prefetch-disable',
+      '--disable-background-networking',
+      '--password-store=basic',
+      '--use-mock-keychain',
+    ],
   };
   if (process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH) {
     launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
