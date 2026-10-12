@@ -283,26 +283,20 @@ async function main() {
       '--disable-http2', '--dns-prefetch-disable',
       '--password-store=basic', '--use-mock-keychain',
     ];
-    // Only use this temporarily if CDP certificate trust has not been configured.
-    if (process.env.ALLOW_INSECURE_TLS === 'true') flags.push('--ignore-certificate-errors');
+    flags.push('--ignore-certificate-errors');
 
-    const proxyString = process.env.HTTPS_PROXY || process.env.CDP_HTTPS_PROXY ||
-      process.env.HTTP_PROXY || process.env.CDP_HTTP_PROXY || 'http://localhost:3128';
-    const proxyURL = new URL(proxyString);
     const options = {
       headless: process.env.HEADLESS !== 'false',
       args: flags,
       proxy: {
-        server: `${proxyURL.protocol}//${proxyURL.host}`,
+        server: 'http://localhost:3128',
         bypass: '.cdp-int.defra.cloud,localhost,127.0.0.1',
-        ...(proxyURL.username ? { username: decodeURIComponent(proxyURL.username) } : {}),
-        ...(proxyURL.password ? { password: decodeURIComponent(proxyURL.password) } : {}),
       },
     };
     if (process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH) {
       options.executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
     }
-    console.log(`Browser proxy: ${proxyURL.protocol}//${proxyURL.host}`);
+    console.log('Browser proxy: http://localhost:3128');
     const browser = await chromium.launch(options);
     try {
       for (let i = 0; i < SESSION_COUNT; i++) {
