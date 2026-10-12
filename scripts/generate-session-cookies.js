@@ -176,12 +176,14 @@ async function main() {
     launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
   }
   // In CDP the local squid sidecar runs at localhost:3128 and handles upstream proxy auth.
-  // Route all traffic through it (no bypass) — same as the old WDIO-based approach.
+  // Internal .cdp-int.defra.cloud domains must bypass the proxy (squid blocks CONNECT tunnels to them).
+  // External domains (login.microsoftonline.com etc.) go through the proxy.
   // Fall back to HTTPS_PROXY/HTTP_PROXY if the sidecar address is overridden via env.
   const proxyServer = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || 'http://localhost:3128';
   const proxyUrl = new URL(proxyServer);
   launchOptions.proxy = {
     server: `${proxyUrl.protocol}//${proxyUrl.host}`,
+    bypass: '.cdp-int.defra.cloud',
     username: proxyUrl.username || undefined,
     password: proxyUrl.password || undefined,
   };
