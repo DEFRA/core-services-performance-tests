@@ -1,217 +1,324 @@
 /**
- * generate-session-cookies.js
+ * Generate CW frontend session cookies for k6.
  *
- * Logs into the CW frontend via Microsoft Entra ID and writes session cookies
- * to a CSV file for use by K6 scenarios. Run this before any K6 test that
- * exercises the CW frontend (frps-full-journey, wmp-cw-journey).
+ * COOKIE_GENERATION_MODE=browser (default): existing Entra login, with CDN diagnostics.
+ * COOKIE_GENERATION_MODE=session-factory: browserless, but requires an IMPLEMENTED,
+ * test-environment-only CW endpoint that issues the normal session cookie.
  *
- * Each login uses an isolated browser context so cookies don't bleed between
- * sessions. Microsoft Entra ID will issue a separate session token per context.
- *
- * Usage:
- *   npm run generate-cookies
- *
- * Required env vars:
- *   CW_FRONTEND_URL        e.g. https://fg-cw-frontend.perf-test.cdp-int.defra.cloud
- *   ENTRA_ID_WRITER_USER   caseworker username (email)
- *   ENTRA_ID_USER_PASSWORD caseworker password
- *
- * Optional env vars:
- *   SESSION_COUNT          number of sessions to generate (default: 10)
- *   OUTPUT_FILE            path to write CSV (default: src/data/cw-session-cookies.csv)
- *   HEADLESS               set to "false" to watch the browser (default: true)
+ * Required in both modes: CW_FRONTEND_URL
+ * Browser mode: ENTRA_ID_WRITER_USER, ENTRA_ID_USER_PASSWORD
+ * Session-factory mode: CW_SESSION_FACTORY_URL, CW_SESSION_FACTORY_TOKEN,
+ *                       CW_TEST_USER_ID
+ * Optional: SESSION_COUNT (default 10), OUTPUT_FILE, HEADLESS,
+ *           PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH, LOGIN_TIMEOUT_MS.
  */
 
 import { chromium } from 'playwright';
-import { writeFileSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { request as httpsRequest } from 'node:https';
+import { mkdirSync, writeFileSync, renameSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-// ── Config ────────────────────────────────────────────────────────────────────
-
-const CW_URL = process.env.CW_FRONTEND_URL;
+const CW_URL = process.env.CW_FRONTEND_URL?.replace(/\/$/, '');
 const USERNAME = process.env.ENTRA_ID_WRITER_USER;
 const PASSWORD = process.env.ENTRA_ID_USER_PASSWORD;
-const SESSION_COUNT = parseInt(process.env.SESSION_COUNT ?? '10', 10);
-const OUTPUT_FILE = process.env.OUTPUT_FILE ?? `${__dirname}/../src/data/cw-session-cookies.csv`;
-const HEADLESS = process.env.HEADLESS !== 'false';
-
-const LOGIN_TIMEOUT = 60_000;
+const MODE = process.env.COOKIE_GENERATION_MODE || 'browser';
+const SESSION_COUNT = Number(process.env.SESSION_COUNT || '10');
+const OUTPUT_FILE = process.env.OUTPUT_FILE || `${__dirname}/../src/data/cw-session-cookies.csv`;
+const LOGIN_TIMEOUT = Number(process.env.LOGIN_TIMEOUT_MS || '20000');
 const POST_LOGIN_TIMEOUT = 30_000;
-const MICROSOFT_HOSTS = ['login.microsoftonline.com', 'login.live.com'];
+const MAX_ATTEMPTS = 3;
 
-// ── Validation ────────────────────────────────────────────────────────────────
-
-if (!CW_URL || !USERNAME || !PASSWORD) {
-  console.error('Missing required env vars: CW_FRONTEND_URL, ENTRA_ID_WRITER_USER, ENTRA_ID_USER_PASSWORD');
-  process.exit(1);
+if (!CW_URL || !['browser', 'session-factory'].includes(MODE) ||
+    !Number.isInteger(SESSION_COUNT) || SESSION_COUNT < 1 ||
+    !Number.isFinite(LOGIN_TIMEOUT) || LOGIN_TIMEOUT < 1000) {
+  throw new Error('Invalid CW_FRONTEND_URL, COOKIE_GENERATION_MODE, SESSION_COUNT or LOGIN_TIMEOUT_MS');
+}
+const CW_ORIGIN = new URL(CW_URL).origin;
+const CW_HOST = new URL(CW_URL).hostname;
+if (new URL(CW_URL).protocol !== 'https:') {
+  throw new Error('CW_FRONTEND_URL must use HTTPS');
 }
 
-// ── Entra ID login (mirrors fg-cw-acceptance-tests/test/support/auth/entraLogin.js) ──
+function hostname(value) {
+  try { return new URL(value).hostname.toLowerCase(); } catch { return ''; }
+}
+function safeLocation(value) {
+  try {
+    const url = new URL(value);
+    return `${url.origin}${url.pathname}`; // never log OAuth codes, state or tokens
+  } catch { return '(unparseable URL)'; }
+}
+function isMicrosoft(value) {
+  return ['login.microsoftonline.com', 'login.live.com'].includes(hostname(value));
+}
+function isAuthCdn(value) {
+  const host = hostname(value);
+  return host === 'aadcdn.msauth.net' || host === 'aadcdn.msftauth.net' ||
+    host.endsWith('.msauth.net') || host.endsWith('.msftauth.net') ||
+    host.endsWith('.msauthimages.net') || host.endsWith('.msftauthimages.net');
+}
 
-async function entraLogin(page, username, password) {
-  const isMicrosoftUrl = () => MICROSOFT_HOSTS.some((h) => page.url().includes(h));
+function installNetworkDiagnostics(page) {
+  const diagnostic = {
+    cdnRequests: 0,
+    cdnFailures: [],
+    otherFailures: [],
+    pageErrors: 0,
+  };
 
+  page.on('request', request => {
+    if (isAuthCdn(request.url())) diagnostic.cdnRequests += 1;
+  });
+  page.on('requestfailed', request => {
+    const info = `${request.resourceType()} ${safeLocation(request.url())} ` +
+      `${request.failure()?.errorText || '(unknown network error)'}`;
+    if (isAuthCdn(request.url())) {
+      diagnostic.cdnFailures.push(info);
+      console.error(`  CDN REQUEST FAILED: ${info}`);
+    } else if (hostname(request.url()) !== CW_HOST) {
+      diagnostic.otherFailures.push(info);
+      console.error(`  EXTERNAL REQUEST FAILED: ${info}`);
+    }
+  });
+  page.on('response', response => {
+    if (!isAuthCdn(response.url())) return;
+    const contentType = response.headers()['content-type'] || '';
+    const suspiciousScript = response.request().resourceType() === 'script' &&
+      /^text\/html\b/i.test(contentType);
+    if (response.status() < 400 && !suspiciousScript) return;
+    const info = `HTTP ${response.status()} ${safeLocation(response.url())}` +
+      (suspiciousScript ? ' (HTML returned for JavaScript)' : '');
+    diagnostic.cdnFailures.push(info);
+    console.error(`  CDN HTTP ERROR: ${info}`);
+  });
+  page.on('console', message => {
+    if (message.type() !== 'error') return;
+    const sanitized = message.text()
+      .replace(/https?:\/\/[^\s\"'<>)]*/g, value => safeLocation(value))
+      .replaceAll(PASSWORD || '\u0000', '[REDACTED]')
+      .replaceAll(USERNAME || '\u0000', '[REDACTED]');
+    console.error(`  BROWSER CONSOLE ERROR: ${sanitized.slice(0, 350)}`);
+  });
+  page.on('pageerror', error => {
+    diagnostic.pageErrors += 1;
+    // Deliberately avoid dumping arbitrary messages: Microsoft URLs can carry auth parameters.
+    console.error(`  PAGE JAVASCRIPT ERROR: ${error.name || 'Error'} (details suppressed)`);
+  });
+  return diagnostic;
+}
+
+async function requireLoginForm(page, diagnostic) {
+  try {
+    await page.locator('input[name="loginfmt"]').waitFor({
+      state: 'visible', timeout: LOGIN_TIMEOUT,
+    });
+  } catch (error) {
+    console.error(`  Current page: ${safeLocation(page.url())}`);
+    console.error(`  CDN requests seen: ${diagnostic.cdnRequests}`);
+    console.error(`  CDN request failures / HTTP errors: ${diagnostic.cdnFailures.length}`);
+    console.error(`  Other external request failures: ${diagnostic.otherFailures.length}`);
+    console.error(`  Page JavaScript errors: ${diagnostic.pageErrors}`);
+    const scriptHosts = await page.locator('script[src]').evaluateAll(nodes =>
+      [...new Set(nodes.map(node => {
+        try { return new URL(node.src).hostname; } catch { return '(unknown)'; }
+      }))],
+    ).catch(() => []);
+    console.error(`  Script hostnames in document: ${scriptHosts.join(', ') || '(none)'}`);
+
+    if (diagnostic.cdnFailures.length > 0) {
+      const failure = new Error(
+        'MICROSOFT_AUTH_CDN_FAILED: required Microsoft authentication assets ' +
+        'were not retrieved. Check CDP squid rules/TLS connectivity; retrying the ' +
+        'same Playwright selector will not fix a persistent proxy denial.',
+      );
+      failure.code = 'MICROSOFT_AUTH_CDN_FAILED';
+      throw failure;
+    }
+    throw new Error(
+      `Entra login input did not become visible after ${LOGIN_TIMEOUT}ms. ` +
+      'Examine the request/pageerror diagnostics; do not infer a CDN denial from HTML alone.',
+      { cause: error },
+    );
+  }
+}
+
+async function entraLogin(page, diagnostic) {
   const fill = async (selector, value) => {
-    await page.waitForSelector(selector, { state: 'visible', timeout: LOGIN_TIMEOUT });
-    await page.click(selector);
-    await page.fill(selector, value);
+    await page.locator(selector).fill(value, { timeout: LOGIN_TIMEOUT });
   };
-
-  const click = async (selector) => {
-    await page.waitForSelector(selector, { state: 'visible', timeout: LOGIN_TIMEOUT });
-    await page.click(selector);
+  const click = async selector => {
+    await page.locator(selector).click({ timeout: LOGIN_TIMEOUT });
   };
-
-  const MAX_ATTEMPTS = 3;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      console.log(`  Entra login attempt ${attempt}/${MAX_ATTEMPTS} | current url: ${page.url()}`);
-      const pageContent = await page.content();
-      console.log(`  Page title: ${await page.title()}`);
-      console.log(`  Page content snippet: ${pageContent.substring(0, 1000)}`);
-
-      // Enter username — use name attribute (more stable than id across MS login page versions)
-      await fill('input[name="loginfmt"]', username);
+      console.log(`  Entra attempt ${attempt}/${MAX_ATTEMPTS} at ${safeLocation(page.url())}`);
+      await requireLoginForm(page, diagnostic);
+      await fill('input[name="loginfmt"]', USERNAME);
+      await click('#idSIButton9');
+      await fill('input[name="passwd"]', PASSWORD);
       await click('#idSIButton9');
 
-      // Enter password
-      await fill('input[name="passwd"]', password);
-      await click('#idSIButton9');
-
-      await page.waitForTimeout(1000);
-
-      // Dismiss "Stay signed in?" prompt if present
+      // Optional Microsoft "Stay signed in?" page. A separate prompt may not appear.
       try {
-        await page.waitForSelector('#idSIButton9', { state: 'visible', timeout: 3000 });
-        if (isMicrosoftUrl()) {
-          console.log('  Dismissing "Stay signed in?" prompt');
-          await page.click('#idSIButton9');
-        }
+        await page.getByText('Stay signed in?', { exact: false }).waitFor({
+          state: 'visible', timeout: 4_000,
+        });
+        if (isMicrosoft(page.url())) await click('#idSIButton9');
       } catch {
-        // prompt not shown — continue
+        // Not present, already navigated, or still loading.
       }
 
-      // Wait until we're back on the CW frontend
-      await page.waitForFunction(
-        (hosts) => !hosts.some((h) => window.location.href.includes(h)),
-        MICROSOFT_HOSTS,
-        { timeout: POST_LOGIN_TIMEOUT },
-      );
-
-      console.log('  Login successful');
+      await page.waitForURL(url =>
+        url.hostname === CW_HOST &&
+        !['/login', '/login/callback'].includes(url.pathname),
+      { waitUntil: 'domcontentloaded', timeout: POST_LOGIN_TIMEOUT });
       return;
-    } catch (err) {
-      console.warn(`  Attempt ${attempt} failed: ${err.message}`);
-
-      if (attempt === MAX_ATTEMPTS) throw err;
-
-      if (isMicrosoftUrl()) {
-        await page.reload();
-      } else {
-        await page.goBack();
+    } catch (error) {
+      console.warn(`  Attempt ${attempt} failed: ${error.message}`);
+      if (error.code === 'MICROSOFT_AUTH_CDN_FAILED' || attempt === MAX_ATTEMPTS) {
+        throw error;
       }
-      await page.waitForTimeout(2000);
+      if (isMicrosoft(page.url())) {
+        await page.reload({ waitUntil: 'domcontentloaded' });
+      } else {
+        // Start a fresh login rather than reusing potentially invalid OAuth state.
+        await page.goto(`${CW_ORIGIN}/login`, { waitUntil: 'domcontentloaded' });
+      }
     }
   }
 }
 
-// ── Generate one session ──────────────────────────────────────────────────────
-
-async function generateSession(browser, index) {
+async function generateBrowserSession(browser, index) {
   const context = await browser.newContext();
   const page = await context.newPage();
-
+  const diagnostic = installNetworkDiagnostics(page); // attach BEFORE navigation
   try {
-    // Navigate directly to /login to immediately trigger the Entra ID redirect
-    const baseUrl = CW_URL.replace(/\/cases\/?$/, '').replace(/\/$/, '');
-    const loginUrl = `${baseUrl}/login`;
-    console.log(`[${index + 1}/${SESSION_COUNT}] Navigating to ${loginUrl}`);
-    await page.goto(loginUrl, { waitUntil: 'domcontentloaded' });
-
-    await entraLogin(page, USERNAME, PASSWORD);
-
-    const cookies = await context.cookies();
-    const sessionCookie = cookies.find((c) => c.name === 'session');
-
-    if (!sessionCookie) {
-      throw new Error('session cookie not found after login');
-    }
-
-    console.log(`[${index + 1}/${SESSION_COUNT}] Got session cookie`);
-    return `session=${sessionCookie.value}`;
+    console.log(`[${index + 1}/${SESSION_COUNT}] Opening ${CW_ORIGIN}/login`);
+    await page.goto(`${CW_ORIGIN}/login`, { waitUntil: 'domcontentloaded' });
+    await entraLogin(page, diagnostic);
+    const cookies = await context.cookies([CW_ORIGIN]); // restrict to CW, not Microsoft
+    const session = cookies.find(cookie => cookie.name === 'session' &&
+      (CW_HOST === cookie.domain.replace(/^\./, '') ||
+       CW_HOST.endsWith(`.${cookie.domain.replace(/^\./, '')}`)));
+    if (!session) throw new Error('CW session cookie missing following OIDC callback');
+    console.log(`[${index + 1}/${SESSION_COUNT}] CW cookie captured`);
+    return `session=${session.value}`;
   } finally {
     await context.close();
   }
 }
 
-// ── Main ──────────────────────────────────────────────────────────────────────
-
-async function main() {
-  console.log(`Generating ${SESSION_COUNT} CW session cookies`);
-  console.log(`  User: ${USERNAME}`);
-  console.log(`  URL:  ${CW_URL}`);
-  console.log(`  Out:  ${OUTPUT_FILE}`);
-  console.log('');
-
-  const launchOptions = {
-    headless: HEADLESS,
-    args: [
-      '--no-sandbox',
-      '--disable-gpu',
-      '--disable-dev-shm-usage',
-      '--disable-infobars',
-      '--window-size=1920,1080',
-      '--ignore-certificate-errors',
-      '--disable-http2',
-      '--dns-prefetch-disable',
-      '--enable-features=NetworkService,NetworkServiceInProcess',
-      '--password-store=basic',
-      '--use-mock-keychain',
-    ],
-  };
-  if (process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH) {
-    launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+function createFactorySession(index) {
+  // This does NOT call a Microsoft endpoint and will NOT work until the CW
+  // frontend implements an authorized test-only endpoint that sets its real cookie.
+  const endpoint = new URL(process.env.CW_SESSION_FACTORY_URL);
+  if (endpoint.origin !== CW_ORIGIN) {
+    throw new Error('CW_SESSION_FACTORY_URL must be on the CW frontend origin');
   }
-  // In CDP the local squid sidecar runs at localhost:3128 and handles upstream proxy auth.
-  // Internal .cdp-int.defra.cloud domains must bypass the proxy (squid blocks CONNECT tunnels to them).
-  // External domains (login.microsoftonline.com etc.) go through the proxy.
-  // Fall back to HTTPS_PROXY/HTTP_PROXY if the sidecar address is overridden via env.
-  const proxyServer = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || 'http://localhost:3128';
-  const proxyUrl = new URL(proxyServer);
-  launchOptions.proxy = {
-    server: `${proxyUrl.protocol}//${proxyUrl.host}`,
-    bypass: '.cdp-int.defra.cloud',
-    username: proxyUrl.username || undefined,
-    password: proxyUrl.password || undefined,
-  };
-  const browser = await chromium.launch(launchOptions);
-
-  const cookies = [];
-
-  try {
-    // Run sequentially — parallel Entra logins from the same account can
-    // trigger MFA prompts or rate limiting
-    for (let i = 0; i < SESSION_COUNT; i++) {
-      const cookie = await generateSession(browser, i);
-      cookies.push(cookie);
-    }
-  } finally {
-    await browser.close();
-  }
-
-  const csv = ['cookieHeader', ...cookies].join('\n') + '\n';
-
-  mkdirSync(dirname(OUTPUT_FILE), { recursive: true });
-  writeFileSync(OUTPUT_FILE, csv, 'utf8');
-
-  console.log(`\nWrote ${cookies.length} session cookies to ${OUTPUT_FILE}`);
+  const body = JSON.stringify({ testUserId: process.env.CW_TEST_USER_ID });
+  return new Promise((resolve, reject) => {
+    const req = httpsRequest(endpoint, {
+      method: 'POST',
+      headers: {
+        'authorization': `Bearer ${process.env.CW_SESSION_FACTORY_TOKEN}`,
+        'content-type': 'application/json',
+        'content-length': Buffer.byteLength(body),
+      },
+    }, response => {
+      // Do not log the response body, authorization header, or session values.
+      const setCookies = response.headers['set-cookie'] || [];
+      const match = setCookies
+        .map(value => /^session=([^;]*)/i.exec(value))
+        .find(Boolean);
+      response.resume();
+      response.on('end', () => {
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          return reject(new Error(`Session factory responded HTTP ${response.statusCode}`));
+        }
+        if (!match || !match[1]) {
+          return reject(new Error('Session factory returned no session Set-Cookie header'));
+        }
+        console.log(`[${index + 1}/${SESSION_COUNT}] CW cookie captured`);
+        resolve(`session=${match[1]}`);
+      });
+    });
+    req.setTimeout(15_000, () => req.destroy(new Error('Session factory request timed out')));
+    req.on('error', reject);
+    req.end(body);
+  });
 }
 
-main().catch((err) => {
-  console.error('Failed to generate session cookies:', err);
-  process.exit(1);
+function writeCsv(cookies) {
+  const csv = ['cookieHeader', ...cookies].join('\n') + '\n';
+  mkdirSync(dirname(OUTPUT_FILE), { recursive: true });
+  const tempFile = `${OUTPUT_FILE}.${process.pid}.tmp`;
+  writeFileSync(tempFile, csv, { encoding: 'utf8', mode: 0o600 });
+  renameSync(tempFile, OUTPUT_FILE);
+  console.log(`Wrote ${cookies.length} CW session cookies to ${OUTPUT_FILE}`);
+}
+
+async function main() {
+  console.log(`Generating ${SESSION_COUNT} CW sessions (mode: ${MODE})`);
+  const cookies = [];
+
+  if (MODE === 'session-factory') {
+    if (!process.env.CW_SESSION_FACTORY_URL || !process.env.CW_SESSION_FACTORY_TOKEN ||
+        !process.env.CW_TEST_USER_ID) {
+      throw new Error('session-factory mode requires CW_SESSION_FACTORY_URL, ' +
+        'CW_SESSION_FACTORY_TOKEN, CW_TEST_USER_ID');
+    }
+    for (let i = 0; i < SESSION_COUNT; i++) {
+      cookies.push(await createFactorySession(i));
+    }
+  } else {
+    if (!USERNAME || !PASSWORD) {
+      throw new Error('Browser mode requires ENTRA_ID_WRITER_USER, ENTRA_ID_USER_PASSWORD');
+    }
+    const flags = [
+      '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
+      '--disable-infobars', '--window-size=1920,1080',
+      '--disable-http2', '--dns-prefetch-disable',
+      '--password-store=basic', '--use-mock-keychain',
+    ];
+    // Only use this temporarily if CDP certificate trust has not been configured.
+    if (process.env.ALLOW_INSECURE_TLS === 'true') flags.push('--ignore-certificate-errors');
+
+    const proxyString = process.env.HTTPS_PROXY || process.env.CDP_HTTPS_PROXY ||
+      process.env.HTTP_PROXY || process.env.CDP_HTTP_PROXY || 'http://localhost:3128';
+    const proxyURL = new URL(proxyString);
+    const options = {
+      headless: process.env.HEADLESS !== 'false',
+      args: flags,
+      proxy: {
+        server: `${proxyURL.protocol}//${proxyURL.host}`,
+        bypass: '.cdp-int.defra.cloud,localhost,127.0.0.1',
+        ...(proxyURL.username ? { username: decodeURIComponent(proxyURL.username) } : {}),
+        ...(proxyURL.password ? { password: decodeURIComponent(proxyURL.password) } : {}),
+      },
+    };
+    if (process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH) {
+      options.executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+    }
+    console.log(`Browser proxy: ${proxyURL.protocol}//${proxyURL.host}`);
+    const browser = await chromium.launch(options);
+    try {
+      for (let i = 0; i < SESSION_COUNT; i++) {
+        cookies.push(await generateBrowserSession(browser, i));
+      }
+    } finally {
+      await browser.close();
+    }
+  }
+  if (new Set(cookies).size !== cookies.length) {
+    throw new Error('Duplicate CW session cookies returned; cannot supply independent sessions');
+  }
+  writeCsv(cookies);
+}
+
+main().catch(error => {
+  console.error(`Session generation failed: ${error.message}`);
+  process.exitCode = 1;
 });
