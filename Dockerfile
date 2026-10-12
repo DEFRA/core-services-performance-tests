@@ -16,6 +16,11 @@ RUN apk add --no-cache \
 
 # Use system Chromium — skip Playwright's own browser download
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
+# Print the actual Chromium path at build time for verification
+RUN which chromium-browser 2>/dev/null || which chromium 2>/dev/null || echo "WARNING: chromium not found"
+
+# Alpine's chromium package installs to /usr/bin/chromium-browser
 ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 WORKDIR /app
