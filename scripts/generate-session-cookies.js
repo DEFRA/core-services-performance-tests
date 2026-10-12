@@ -69,7 +69,7 @@ async function entraLogin(page, username, password) {
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      console.log(`  Entra login attempt ${attempt}/${MAX_ATTEMPTS}`);
+      console.log(`  Entra login attempt ${attempt}/${MAX_ATTEMPTS} | current url: ${page.url()}`);
 
       // Enter username — always wait for field; never skip conditionally
       await fill('#i0116', username);
@@ -176,12 +176,12 @@ async function main() {
     launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
   }
   // In CDP the local squid sidecar runs at localhost:3128 and handles upstream proxy auth.
+  // Route all traffic through it (no bypass) — same as the old WDIO-based approach.
   // Fall back to HTTPS_PROXY/HTTP_PROXY if the sidecar address is overridden via env.
   const proxyServer = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || 'http://localhost:3128';
   const proxyUrl = new URL(proxyServer);
   launchOptions.proxy = {
     server: `${proxyUrl.protocol}//${proxyUrl.host}`,
-    bypass: process.env.NO_PROXY || '.cdp-int.defra.cloud',
     username: proxyUrl.username || undefined,
     password: proxyUrl.password || undefined,
   };
