@@ -154,7 +154,10 @@ async function main() {
   console.log(`  Out:  ${OUTPUT_FILE}`);
   console.log('');
 
-  const launchOptions = { headless: HEADLESS };
+  const launchOptions = {
+    headless: HEADLESS,
+    args: ['--disable-http2'],
+  };
   if (process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH) {
     launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
   }
