@@ -161,12 +161,16 @@ async function main() {
   if (process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH) {
     launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
   }
-  // Playwright's Chromium subprocess does not inherit HTTP_PROXY/HTTPS_PROXY automatically
+  // Playwright's Chromium subprocess does not inherit HTTP_PROXY/HTTPS_PROXY automatically.
+  // Credentials must be extracted from the proxy URL and passed separately.
   const proxyServer = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
   if (proxyServer) {
+    const proxyUrl = new URL(proxyServer);
     launchOptions.proxy = {
-      server: proxyServer,
+      server: `${proxyUrl.protocol}//${proxyUrl.host}`,
       bypass: process.env.NO_PROXY || '',
+      username: proxyUrl.username || undefined,
+      password: proxyUrl.password || undefined,
     };
   }
   const browser = await chromium.launch(launchOptions);
