@@ -38,7 +38,7 @@ const SESSION_COUNT = parseInt(process.env.SESSION_COUNT ?? '10', 10);
 const OUTPUT_FILE = process.env.OUTPUT_FILE ?? `${__dirname}/../src/data/cw-session-cookies.csv`;
 const HEADLESS = process.env.HEADLESS !== 'false';
 
-const LOGIN_TIMEOUT = 15_000;
+const LOGIN_TIMEOUT = 60_000;
 const POST_LOGIN_TIMEOUT = 30_000;
 const MICROSOFT_HOSTS = ['login.microsoftonline.com', 'login.live.com'];
 
@@ -71,12 +71,12 @@ async function entraLogin(page, username, password) {
     try {
       console.log(`  Entra login attempt ${attempt}/${MAX_ATTEMPTS} | current url: ${page.url()}`);
 
-      // Enter username — always wait for field; never skip conditionally
-      await fill('#i0116', username);
+      // Enter username — use name attribute (more stable than id across MS login page versions)
+      await fill('input[name="loginfmt"]', username);
       await click('#idSIButton9');
 
       // Enter password
-      await fill('#i0118', password);
+      await fill('input[name="passwd"]', password);
       await click('#idSIButton9');
 
       await page.waitForTimeout(1000);
@@ -165,8 +165,6 @@ async function main() {
       '--ignore-certificate-errors',
       '--disable-http2',
       '--dns-prefetch-disable',
-      '--disable-background-networking',
-      '--disable-remote-fonts',
       '--enable-features=NetworkService,NetworkServiceInProcess',
       '--password-store=basic',
       '--use-mock-keychain',
