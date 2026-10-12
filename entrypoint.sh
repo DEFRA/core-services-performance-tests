@@ -11,6 +11,31 @@ fi
 
 REPORTS_DIR=/app/reports
 
+# ── Generate CW session cookies ───────────────────────────────────────────────
+echo "========================================"
+echo "Generating CW session cookies"
+echo "========================================"
+
+if [ -z "${ENTRA_ID_WRITER_USER}" ] || [ -z "${ENTRA_ID_USER_PASSWORD}" ]; then
+  echo "ERROR: ENTRA_ID_WRITER_USER and ENTRA_ID_USER_PASSWORD must be set (configure as CDP secrets)"
+  exit 1
+fi
+
+CW_FRONTEND_URL="https://${CW_FRONTEND_BASE_URL}" \
+  ENTRA_ID_WRITER_USER="${ENTRA_ID_WRITER_USER}" \
+  ENTRA_ID_USER_PASSWORD="${ENTRA_ID_USER_PASSWORD}" \
+  SESSION_COUNT="${SESSION_COUNT:-25}" \
+  OUTPUT_FILE=/app/src/data/frps-session-cookies.csv \
+  node /app/scripts/generate-session-cookies.js
+
+if [ $? -ne 0 ]; then
+  echo "ERROR: Failed to generate session cookies"
+  exit 1
+fi
+
+echo "Session cookies generated"
+echo "========================================"
+
 run_scenario() {
   SCENARIO=$1
   SCENARIO_FILE=/app/src/scenarios/${SCENARIO}.js
