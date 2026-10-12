@@ -158,6 +158,14 @@ async function main() {
   if (process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH) {
     launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
   }
+  // Playwright's Chromium subprocess does not inherit HTTP_PROXY/HTTPS_PROXY automatically
+  const proxyServer = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
+  if (proxyServer) {
+    launchOptions.proxy = {
+      server: proxyServer,
+      bypass: process.env.NO_PROXY || '',
+    };
+  }
   const browser = await chromium.launch(launchOptions);
 
   const cookies = [];
