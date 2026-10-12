@@ -133,6 +133,7 @@ const gasHeaders = () => {
   const headers = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
+    'Accept-Encoding': 'identity',
     Authorization: `Bearer ${GAS_BEARER_TOKEN}`,
   };
   if (GAS_API_KEY) headers['x-api-key'] = GAS_API_KEY;
