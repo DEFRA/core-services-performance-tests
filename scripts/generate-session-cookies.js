@@ -70,6 +70,9 @@ async function entraLogin(page, username, password) {
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
       console.log(`  Entra login attempt ${attempt}/${MAX_ATTEMPTS} | current url: ${page.url()}`);
+      const pageContent = await page.content();
+      console.log(`  Page title: ${await page.title()}`);
+      console.log(`  Page content snippet: ${pageContent.substring(0, 1000)}`);
 
       // Enter username — use name attribute (more stable than id across MS login page versions)
       await fill('input[name="loginfmt"]', username);
