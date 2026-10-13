@@ -20,6 +20,10 @@ fi
 echo "========================================"
 echo "Generating CW session cookies"
 echo "========================================"
+echo "Checking Microsoft CDN reachability via localhost:3128..."
+curl -sS -v --proxy http://127.0.0.1:3128 --noproxy '' --max-time 15 -o /dev/null \
+  https://aadcdn.msauth.net/ 2>&1 | grep -E 'CONNECT|< HTTP|curl:'
+echo "CDN check complete"
 CW_FRONTEND_URL="https://${CW_FRONTEND_BASE_URL}" \
   SESSION_COUNT="${SESSION_COUNT:-25}" \
   OUTPUT_FILE=/app/src/data/frps-session-cookies.csv \
