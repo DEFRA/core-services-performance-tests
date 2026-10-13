@@ -11,6 +11,7 @@ RUN apk add --no-cache \
     nodejs \
     npm \
     chromium \
+    chromium-chromedriver \
     nss \
     freetype \
     harfbuzz \
@@ -22,10 +23,9 @@ COPY --from=k6-source /usr/bin/k6 /usr/local/bin/k6
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --omit=dev
+COPY auth/ ./auth/
+RUN cd /app/auth && npm ci
 
-COPY scripts/ ./scripts/
 COPY src/ ./src/
 COPY entrypoint.sh .
 
