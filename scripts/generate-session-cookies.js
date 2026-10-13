@@ -171,12 +171,7 @@ async function main() {
       '--disable-infobars',
       '--window-size=1920,1080',
     ],
-    proxy: {
-      server: 'http://localhost:3128',
-      // Bypass the proxy for Microsoft auth CDN so Chrome connects directly.
-      // The squid sidecar blocks CONNECT to aadcdn.msauth.net; direct access works.
-      bypass: 'aadcdn.msauth.net,aadcdn.msftauth.net,*.msauth.net,*.msftauth.net,*.msauthimages.net',
-    },
+    proxy: { server: 'http://localhost:3128' },
   });
 
   const cookies = [];
