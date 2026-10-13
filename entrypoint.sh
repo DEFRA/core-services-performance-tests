@@ -6,30 +6,10 @@ echo "run_id: $RUN_ID in $ENVIRONMENT"
 if [ -n "$CDP_HTTP_PROXY" ]; then
   export HTTP_PROXY="$CDP_HTTP_PROXY"
   export HTTPS_PROXY="$CDP_HTTPS_PROXY"
-  export NO_PROXY=".cdp-int.defra.cloud,localhost,127.0.0.1"
+  export NO_PROXY=".cdp-int.defra.cloud"
 fi
 
 REPORTS_DIR=/app/reports
-
-# Generate CW session cookies before running k6 scenarios
-if [ -z "${ENTRA_ID_WRITER_USER}" ] || [ -z "${ENTRA_ID_USER_PASSWORD}" ]; then
-  echo "ERROR: ENTRA_ID_WRITER_USER and ENTRA_ID_USER_PASSWORD are required"
-  exit 1
-fi
-
-echo "========================================"
-echo "Generating CW session cookies"
-echo "========================================"
-
-CW_FRONTEND_URL="https://${CW_FRONTEND_BASE_URL}" \
-  OUTPUT_FILE=/app/src/data/frps-session-cookies.csv \
-  sh /app/auth/generate-multiple-cookies.sh "${SESSION_COUNT:-25}"
-
-if [ $? -ne 0 ]; then
-  echo "ERROR: Failed to generate session cookies"
-  exit 1
-fi
-echo "Session cookies generated"
 
 run_scenario() {
   SCENARIO=$1
