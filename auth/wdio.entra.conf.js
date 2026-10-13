@@ -12,6 +12,11 @@ const chromedriverPath = fs.existsSync(systemChromedriverPath)
   ? systemChromedriverPath
   : npmChromedriverPath
 
+// Tell ChromeDriver where Chromium is when running in Docker (Alpine).
+// PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH is already set in the Dockerfile.
+const systemChromiumPath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ||
+  (fs.existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : null)
+
 let chromedriverProcess
 
 export const config = {
@@ -34,6 +39,7 @@ export const config = {
       browserName: 'chrome',
       'wdio:enforceWebDriverClassic': true,
       'goog:chromeOptions': {
+        ...(systemChromiumPath ? { binary: systemChromiumPath } : {}),
         args: debug
           ? [
               '--disable-infobars',
@@ -42,7 +48,7 @@ export const config = {
           : [
               '--no-sandbox',
               '--disable-infobars',
-              '--headless',
+              '--headless=new',
               '--disable-gpu',
               '--window-size=1920,1080',
               '--enable-features=NetworkService,NetworkServiceInProcess',
