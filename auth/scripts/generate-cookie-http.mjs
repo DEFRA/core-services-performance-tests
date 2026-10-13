@@ -34,7 +34,12 @@ import { URL } from 'node:url'
 // ---------------------------------------------------------------------------
 
 const isLocal = process.env.LOCAL === 'true'
-const proxyUrl = isLocal ? null : (process.env.HTTPS_PROXY || process.env.HTTP_PROXY || null)
+const rawProxyUrl = isLocal ? null : (process.env.HTTPS_PROXY || process.env.HTTP_PROXY || null)
+
+// undici ProxyAgent connects to the proxy over plain HTTP (CONNECT tunnel).
+// If the env var uses https:// scheme, replace it with http:// so undici can
+// establish the TCP connection to the proxy.
+const proxyUrl = rawProxyUrl ? rawProxyUrl.replace(/^https:\/\//, 'http://') : null
 
 let dispatcher
 if (proxyUrl) {
@@ -392,5 +397,6 @@ try {
   process.exit(0)
 } catch (err) {
   console.error('[http-auth] FAILED:', err.message)
+  if (err.cause) console.error('[http-auth] Cause:', err.cause)
   process.exit(1)
 }
