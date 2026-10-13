@@ -153,7 +153,19 @@ async function main() {
   console.log(`  Out:  ${OUTPUT_FILE}`);
   console.log('');
 
-  const browser = await chromium.launch({ headless: HEADLESS });
+  const browser = await chromium.launch({
+    headless: HEADLESS,
+    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+    args: [
+      '--no-sandbox',
+      '--disable-gpu',
+      '--disable-dev-shm-usage',
+      '--disable-infobars',
+      '--window-size=1920,1080',
+      '--ignore-certificate-errors',
+    ],
+    proxy: { server: 'http://localhost:3128' },
+  });
 
   const cookies = [];
 

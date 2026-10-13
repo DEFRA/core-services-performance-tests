@@ -11,6 +11,25 @@ fi
 
 REPORTS_DIR=/app/reports
 
+# Generate CW session cookies before running k6 scenarios
+if [ -z "${ENTRA_ID_WRITER_USER}" ] || [ -z "${ENTRA_ID_USER_PASSWORD}" ]; then
+  echo "ERROR: ENTRA_ID_WRITER_USER and ENTRA_ID_USER_PASSWORD are required"
+  exit 1
+fi
+
+echo "========================================"
+echo "Generating CW session cookies"
+echo "========================================"
+CW_FRONTEND_URL="https://${CW_FRONTEND_BASE_URL}" \
+  SESSION_COUNT="${SESSION_COUNT:-25}" \
+  OUTPUT_FILE=/app/src/data/frps-session-cookies.csv \
+  node /app/scripts/generate-session-cookies.js
+if [ $? -ne 0 ]; then
+  echo "ERROR: Failed to generate session cookies"
+  exit 1
+fi
+echo "Session cookies generated"
+
 run_scenario() {
   SCENARIO=$1
   SCENARIO_FILE=/app/src/scenarios/${SCENARIO}.js
