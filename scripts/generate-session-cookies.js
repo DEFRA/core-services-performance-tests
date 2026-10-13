@@ -49,6 +49,21 @@ if (!CW_URL || !USERNAME || !PASSWORD) {
   process.exit(1);
 }
 
+// ── Proxy config ──────────────────────────────────────────────────────────────
+
+function buildProxyConfig(proxyUrl) {
+  if (!proxyUrl) return undefined;
+  const url = new URL(proxyUrl);
+  const config = {
+    server: `${url.protocol}//${url.host}`,
+    bypass: '.cdp-int.defra.cloud,localhost,127.0.0.1',
+  };
+  if (url.username) config.username = decodeURIComponent(url.username);
+  if (url.password) config.password = decodeURIComponent(url.password);
+  console.log(`  Browser proxy: ${url.protocol}//${url.host} (bypass: .cdp-int.defra.cloud)`);
+  return config;
+}
+
 // ── Entra ID login ────────────────────────────────────────────────────────────
 
 async function entraLogin(page) {
@@ -171,13 +186,9 @@ async function main() {
       '--disable-infobars',
       '--window-size=1920,1080',
     ],
-    // localhost:3128 returns HTTP 307 on CONNECT for Microsoft CDN (redirecting to the
-    // external CDP proxy). Modern Chrome doesn't follow 307 on CONNECT — ERR_TUNNEL_CONNECTION_FAILED.
-    // Solution: use the external CDP proxy directly, bypass it only for internal services.
-    proxy: {
-      server: process.env.PLAYWRIGHT_PROXY_SERVER || 'http://localhost:3128',
-      bypass: '.cdp-int.defra.cloud,localhost,127.0.0.1',
-    },
+    // localhost:3128 ACL-blocks CONNECT to Microsoft CDN (ERR_CUSTOM_ACCESS_DENIED).
+    // Use the external CDP proxy for Microsoft traffic; bypass it for internal services.
+    proxy: buildProxyConfig(process.env.PLAYWRIGHT_PROXY_SERVER),
   });
 
   const cookies = [];
