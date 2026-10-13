@@ -1,8 +1,15 @@
+# Borrow the CDP proxy CA certificate from the CDP base image.
+# Without it, Alpine's system Chromium rejects squid's SSL-inspection certificate
+# and Microsoft auth CDN scripts fail to load, so the login form never renders.
+FROM defradigital/cdp-perf-test-docker:latest AS cdp-base
+
 FROM grafana/k6:0.54.0
 
 USER root
 
-RUN apk add --no-cache aws-cli nodejs npm chromium
+COPY --from=cdp-base /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+
+RUN apk add --no-cache aws-cli nodejs npm chromium ca-certificates && update-ca-certificates
 
 WORKDIR /app
 
