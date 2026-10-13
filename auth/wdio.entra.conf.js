@@ -18,18 +18,7 @@ const systemChromiumPath =
   process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ||
   (fs.existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : null)
 
-// In CDP, localhost:3128 (squid sidecar) blocks CONNECT to aadcdn.msauth.net,
-// which prevents the Microsoft login form from rendering.
-// Use the external CDP proxy for all browser traffic — it allows CDN access.
-// Bypass it for internal .cdp-int.defra.cloud services (accessible directly in CDP).
-const cdpProxy = process.env.CDP_HTTPS_PROXY // e.g. https://user:pass@proxy.host
-const proxyArgs =
-  !debug && !local && cdpProxy
-    ? [
-        `--proxy-server=${cdpProxy}`,
-        '--proxy-bypass-list=*.cdp-int.defra.cloud,localhost,127.0.0.1',
-      ]
-    : []
+const cdpProxy = process.env.CDP_HTTPS_PROXY
 
 let chromedriverProcess
 
@@ -70,17 +59,26 @@ export const config = {
               '--disable-remote-fonts',
               '--ignore-certificate-errors',
               '--disable-dev-shm-usage',
-              ...proxyArgs,
             ],
       },
       // 'eager' returns on DOMContentLoaded — prevents hangs when CDN resources are slow
       pageLoadStrategy: 'eager',
+      // Use localhost:3128 (CDP squid sidecar) in CDP; no proxy locally
+      ...(debug || local
+        ? {}
+        : {
+            proxy: {
+              proxyType: 'manual',
+              httpProxy: 'localhost:3128',
+              sslProxy: 'localhost:3128',
+            },
+          }),
     },
   ],
 
   logLevel: debug ? 'debug' : 'info',
   bail: 1,
-  waitforTimeout: 15000,
+  waitforTimeout: 30000,
   waitforInterval: 200,
   connectionRetryTimeout: 120000,
   connectionRetryCount: 3,
@@ -96,8 +94,8 @@ export const config = {
 
   onPrepare: async function () {
     console.log(`Starting chromedriver from: ${chromedriverPath}`)
-    if (cdpProxy && !debug && !local) {
-      console.log(`Browser proxy: ${cdpProxy.replace(/:([^:@]+)@/, ':***@')} (bypass: *.cdp-int.defra.cloud)`)
+    if (!debug && !local) {
+      console.log(`Browser proxy: localhost:3128`)
     }
     chromedriverProcess = spawn(chromedriverPath, ['--port=9515'], {
       stdio: 'ignore',

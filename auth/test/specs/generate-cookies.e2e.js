@@ -17,9 +17,12 @@ describe('CW session cookie generation', () => {
     console.log(`URL:    ${appUrl}`)
     console.log(`Output: ${outputFile}`)
 
-    const loginUrl = `${appUrl.replace(/\/cases\/?$/, '').replace(/\/$/, '')}/login`
-    console.log(`Navigating to: ${loginUrl}`)
-    await browser.url(loginUrl)
+    // Navigate to root — CW does a server-side 302 → Microsoft login.
+    // Do NOT navigate to /login (CW's own page that JS-redirects; eager returns too early).
+    console.log(`Navigating to: ${appUrl}`)
+    await browser.url(appUrl)
+    console.log(`URL after navigate: ${await browser.getUrl()}`)
+    console.log(`Page title: ${await browser.getTitle()}`)
 
     await loginAndAppendSessionCookie(username, password, {
       appUrl,
