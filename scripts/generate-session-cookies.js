@@ -123,6 +123,13 @@ async function generateSession(browser, index) {
   const context = await browser.newContext();
   const page = await context.newPage();
 
+  page.on('requestfailed', (req) => {
+    const url = req.url();
+    if (url.includes('msauth') || url.includes('microsoftonline')) {
+      console.warn(`  REQUEST FAILED: ${req.failure()?.errorText} — ${url.slice(0, 120)}`);
+    }
+  });
+
   try {
     const baseUrl = CW_URL.replace(/\/cases\/?$/, '').replace(/\/$/, '');
     const loginUrl = `${baseUrl}/login`;
@@ -164,7 +171,12 @@ async function main() {
       '--disable-infobars',
       '--window-size=1920,1080',
     ],
-    proxy: { server: 'http://localhost:3128' },
+    proxy: {
+      server: 'http://localhost:3128',
+      // Bypass the proxy for Microsoft auth CDN so Chrome connects directly.
+      // The squid sidecar blocks CONNECT to aadcdn.msauth.net; direct access works.
+      bypass: 'aadcdn.msauth.net,aadcdn.msftauth.net,*.msauth.net,*.msftauth.net,*.msauthimages.net',
+    },
   });
 
   const cookies = [];
