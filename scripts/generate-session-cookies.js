@@ -171,7 +171,13 @@ async function main() {
       '--disable-infobars',
       '--window-size=1920,1080',
     ],
-    proxy: { server: 'http://localhost:3128' },
+    // localhost:3128 returns HTTP 307 on CONNECT for Microsoft CDN (redirecting to the
+    // external CDP proxy). Modern Chrome doesn't follow 307 on CONNECT — ERR_TUNNEL_CONNECTION_FAILED.
+    // Solution: use the external CDP proxy directly, bypass it only for internal services.
+    proxy: {
+      server: process.env.PLAYWRIGHT_PROXY_SERVER || 'http://localhost:3128',
+      bypass: '.cdp-int.defra.cloud,localhost,127.0.0.1',
+    },
   });
 
   const cookies = [];
