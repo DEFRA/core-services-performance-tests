@@ -134,14 +134,14 @@ const WOODLAND_CONFIG_VERSION = __ENV.WOODLAND_CONFIG_VERSION || '1.43.1'; // �
 
 ### Step 2 — Generate CW session cookies
 
+Run from the repo root:
+
 ```bash
-cd /Users/nitinmali/workspace/farming/core-services-performance-tests
 CW_FRONTEND_URL=https://fg-cw-frontend.perf-test.cdp-int.defra.cloud \
   ENTRA_ID_WRITER_USER=SA-FGCW.WRITER@defra.onmicrosoft.com \
   ENTRA_ID_USER_PASSWORD='REDACTED-HISTORICAL-CREDENTIAL' \
-  SESSION_COUNT=5 \
-  OUTPUT_FILE=src/data/frps-session-cookies.csv \
-  npm run generate-cookies
+  SESSION_COUNT=25 \
+  npm run generate-cookies:frps
 ```
 
 The WMP script shares the same cookie file as FRPS. Cookies expire after 4 hours — regenerate immediately before running.
