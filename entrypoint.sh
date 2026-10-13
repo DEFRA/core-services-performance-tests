@@ -6,7 +6,7 @@ echo "run_id: $RUN_ID in $ENVIRONMENT"
 if [ -n "$CDP_HTTP_PROXY" ]; then
   export HTTP_PROXY="$CDP_HTTP_PROXY"
   export HTTPS_PROXY="$CDP_HTTPS_PROXY"
-  export NO_PROXY=".cdp-int.defra.cloud"
+  export NO_PROXY=".cdp-int.defra.cloud,localhost,127.0.0.1"
 fi
 
 REPORTS_DIR=/app/reports
