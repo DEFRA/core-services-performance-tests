@@ -48,33 +48,96 @@ export async function loginAndAppendSessionCookie(username, password, { appUrl, 
 }
 
 async function findVisibleElement(selector, timeout = 30000) {
-  await browser.waitUntil(
-    async () => {
-      const elements = await $$(selector)
-      for (const el of elements) {
-        if (await el.isDisplayed()) return true
-      }
-      return false
-    },
-    { timeout, interval: 500, timeoutMsg: `No visible element for: ${selector}` }
-  )
-
-  const elements = await $$(selector)
-  for (const el of elements) {
-    if (await el.isDisplayed()) return el
+  // First: wait for element to be visible (CDN scripts have loaded and shown it)
+  let visible = false
+  try {
+    await browser.waitUntil(
+      async () => {
+        const elements = await $$(selector)
+        for (const el of elements) {
+          if (await el.isDisplayed()) return true
+        }
+        return false
+      },
+      { timeout, interval: 500, timeoutMsg: `timeout` }
+    )
+    visible = true
+  } catch (e) {
+    // Not visible within timeout — check if it exists in DOM but hidden
   }
-  throw new Error(`Visible element vanished: ${selector}`)
+
+  if (visible) {
+    const elements = await $$(selector)
+    for (const el of elements) {
+      if (await el.isDisplayed()) return el
+    }
+  }
+
+  // Fallback: element exists in DOM but hidden (CDN blocked; Microsoft form in initial HTML)
+  const existsInDom = await browser.execute(
+    (sel) => !!document.querySelector(sel),
+    selector
+  )
+  console.log(`[login] ${selector} visible=${visible} existsInDom=${existsInDom}`)
+
+  if (!existsInDom) {
+    throw new Error(`Element not found in DOM: ${selector}`)
+  }
+
+  // Use the element — make it interactable via JS before WebDriver interacts with it
+  await browser.execute((sel) => {
+    const el = document.querySelector(sel)
+    if (el) {
+      el.style.display = 'block'
+      el.style.visibility = 'visible'
+      el.style.opacity = '1'
+      el.removeAttribute('aria-hidden')
+      el.removeAttribute('tabindex')
+    }
+  }, selector)
+
+  const el = await $(selector)
+  return el
+}
+
+async function setFieldValue(selector, value) {
+  // Try native setValue first; fall back to JS if element is hidden
+  const el = await $(selector)
+  try {
+    await el.setValue(value)
+  } catch (e) {
+    console.log(`[login] setValue failed for ${selector}, using JS: ${e.message}`)
+    await browser.execute(
+      (sel, val) => {
+        const el = document.querySelector(sel)
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+        nativeSetter.call(el, val)
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+        el.dispatchEvent(new Event('change', { bubbles: true }))
+      },
+      selector,
+      value
+    )
+  }
 }
 
 async function performLogin(username, password) {
   console.log('Waiting for email field...')
   const emailField = await findVisibleElement('input[name="loginfmt"]', 15000)
-  await emailField.setValue(username)
+  await setFieldValue('input[name="loginfmt"]', username)
 
   console.log('Clicking Next...')
   const nextButton = await findVisibleElement('#idSIButton9', 10000)
-  await nextButton.waitForClickable({ timeout: 10000 })
-  await nextButton.click()
+  try {
+    await nextButton.waitForClickable({ timeout: 5000 })
+    await nextButton.click()
+  } catch (e) {
+    console.log(`[login] Next button click failed, using JS click: ${e.message}`)
+    await browser.execute(() => {
+      const btn = document.querySelector('#idSIButton9')
+      if (btn) btn.click()
+    })
+  }
 
   console.log('Waiting for password field...')
   await browser.waitUntil(
@@ -89,7 +152,7 @@ async function performLogin(username, password) {
   )
 
   const passwordField = await findVisibleElement('input[name="passwd"]', 5000)
-  await passwordField.setValue(password)
+  await setFieldValue('input[name="passwd"]', password)
 
   await clickSignInWithRetry()
 }
