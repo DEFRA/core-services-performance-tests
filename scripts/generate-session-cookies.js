@@ -103,6 +103,7 @@ async function entraLogin(page) {
       return;
     } catch (err) {
       console.warn(`  Attempt ${attempt} failed: ${err.message}`);
+      console.warn(`  Current URL: ${page.url()}`);
 
       if (attempt === MAX_ATTEMPTS) throw err;
 
@@ -162,7 +163,6 @@ async function main() {
       '--disable-dev-shm-usage',
       '--disable-infobars',
       '--window-size=1920,1080',
-      '--ignore-certificate-errors',
     ],
     proxy: { server: 'http://localhost:3128' },
   });
