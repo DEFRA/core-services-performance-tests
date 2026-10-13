@@ -92,7 +92,7 @@ export const config = {
 
   mochaOpts: {
     ui: 'bdd',
-    timeout: debug ? 3600000 : 120000,
+    timeout: debug ? 3600000 : 180000,
   },
 
   onPrepare: async function () {

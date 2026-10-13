@@ -24,6 +24,15 @@ describe('CW session cookie generation', () => {
     console.log(`URL after navigate: ${await browser.getUrl()}`)
     console.log(`Page title: ${await browser.getTitle()}`)
 
+    // Diagnostic: check DOM state before attempting login
+    const formImmediate = await browser.execute(() => !!document.querySelector('input[name="loginfmt"]'))
+    console.log(`[diag] loginfmt in DOM immediately: ${formImmediate}`)
+    await browser.pause(5000)
+    const formAfterWait = await browser.execute(() => !!document.querySelector('input[name="loginfmt"]'))
+    console.log(`[diag] loginfmt in DOM after 5s: ${formAfterWait}`)
+    const bodySnippet = await browser.execute(() => document.body.innerHTML.substring(0, 500))
+    console.log(`[diag] body HTML (first 500): ${bodySnippet}`)
+
     await loginAndAppendSessionCookie(username, password, {
       appUrl,
       outputFile,
