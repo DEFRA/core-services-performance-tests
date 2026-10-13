@@ -49,21 +49,6 @@ if (!CW_URL || !USERNAME || !PASSWORD) {
   process.exit(1);
 }
 
-// ── Proxy config ──────────────────────────────────────────────────────────────
-
-function buildProxyConfig(proxyUrl) {
-  if (!proxyUrl) return undefined;
-  const url = new URL(proxyUrl);
-  const config = {
-    server: `${url.protocol}//${url.host}`,
-    bypass: '.cdp-int.defra.cloud,localhost,127.0.0.1',
-  };
-  if (url.username) config.username = decodeURIComponent(url.username);
-  if (url.password) config.password = decodeURIComponent(url.password);
-  console.log(`  Browser proxy: ${url.protocol}//${url.host} (bypass: .cdp-int.defra.cloud)`);
-  return config;
-}
-
 // ── Entra ID login ────────────────────────────────────────────────────────────
 
 async function entraLogin(page) {
@@ -118,7 +103,6 @@ async function entraLogin(page) {
       return;
     } catch (err) {
       console.warn(`  Attempt ${attempt} failed: ${err.message}`);
-      console.warn(`  Current URL: ${page.url()}`);
 
       if (attempt === MAX_ATTEMPTS) throw err;
 
@@ -137,13 +121,6 @@ async function entraLogin(page) {
 async function generateSession(browser, index) {
   const context = await browser.newContext();
   const page = await context.newPage();
-
-  page.on('requestfailed', (req) => {
-    const url = req.url();
-    if (url.includes('msauth') || url.includes('microsoftonline')) {
-      console.warn(`  REQUEST FAILED: ${req.failure()?.errorText} — ${url.slice(0, 120)}`);
-    }
-  });
 
   try {
     const baseUrl = CW_URL.replace(/\/cases\/?$/, '').replace(/\/$/, '');
@@ -176,20 +153,7 @@ async function main() {
   console.log(`  Out:  ${OUTPUT_FILE}`);
   console.log('');
 
-  const browser = await chromium.launch({
-    headless: HEADLESS,
-    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
-    args: [
-      '--no-sandbox',
-      '--disable-gpu',
-      '--disable-dev-shm-usage',
-      '--disable-infobars',
-      '--window-size=1920,1080',
-    ],
-    // localhost:3128 ACL-blocks CONNECT to Microsoft CDN (ERR_CUSTOM_ACCESS_DENIED).
-    // Use the external CDP proxy for Microsoft traffic; bypass it for internal services.
-    proxy: buildProxyConfig(process.env.PLAYWRIGHT_PROXY_SERVER),
-  });
+  const browser = await chromium.launch({ headless: HEADLESS });
 
   const cookies = [];
 
