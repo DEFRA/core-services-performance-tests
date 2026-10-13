@@ -14,8 +14,22 @@ const chromedriverPath = fs.existsSync(systemChromedriverPath)
 
 // Tell ChromeDriver where Chromium is when running in Docker (Alpine).
 // PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH is already set in the Dockerfile.
-const systemChromiumPath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ||
+const systemChromiumPath =
+  process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ||
   (fs.existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : null)
+
+// In CDP, localhost:3128 (squid sidecar) blocks CONNECT to aadcdn.msauth.net,
+// which prevents the Microsoft login form from rendering.
+// Use the external CDP proxy for all browser traffic — it allows CDN access.
+// Bypass it for internal .cdp-int.defra.cloud services (accessible directly in CDP).
+const cdpProxy = process.env.CDP_HTTPS_PROXY // e.g. https://user:pass@proxy.host
+const proxyArgs =
+  !debug && !local && cdpProxy
+    ? [
+        `--proxy-server=${cdpProxy}`,
+        '--proxy-bypass-list=*.cdp-int.defra.cloud,localhost,127.0.0.1',
+      ]
+    : []
 
 let chromedriverProcess
 
@@ -41,10 +55,7 @@ export const config = {
       'goog:chromeOptions': {
         ...(systemChromiumPath ? { binary: systemChromiumPath } : {}),
         args: debug
-          ? [
-              '--disable-infobars',
-              '--window-size=1920,1080',
-            ]
+          ? ['--disable-infobars', '--window-size=1920,1080']
           : [
               '--no-sandbox',
               '--disable-infobars',
@@ -59,20 +70,11 @@ export const config = {
               '--disable-remote-fonts',
               '--ignore-certificate-errors',
               '--disable-dev-shm-usage',
+              ...proxyArgs,
             ],
       },
       // 'eager' returns on DOMContentLoaded — prevents hangs when CDN resources are slow
       pageLoadStrategy: 'eager',
-      // Proxy only in CDP environment (not locally)
-      ...(debug || local
-        ? {}
-        : {
-            proxy: {
-              proxyType: 'manual',
-              httpProxy: 'localhost:3128',
-              sslProxy: 'localhost:3128',
-            },
-          }),
     },
   ],
 
@@ -94,6 +96,9 @@ export const config = {
 
   onPrepare: async function () {
     console.log(`Starting chromedriver from: ${chromedriverPath}`)
+    if (cdpProxy && !debug && !local) {
+      console.log(`Browser proxy: ${cdpProxy.replace(/:([^:@]+)@/, ':***@')} (bypass: *.cdp-int.defra.cloud)`)
+    }
     chromedriverProcess = spawn(chromedriverPath, ['--port=9515'], {
       stdio: 'ignore',
       detached: false,
