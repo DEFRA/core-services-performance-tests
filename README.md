@@ -134,25 +134,17 @@ const WOODLAND_CONFIG_VERSION = __ENV.WOODLAND_CONFIG_VERSION || '1.43.1'; // �
 
 ### Step 2 — Generate CW session cookies
 
-Cookie generation uses WebdriverIO + ChromeDriver (headless Chromium) to log in via Microsoft Entra ID and extract the `session` cookie. In CDP the container runs this automatically before k6 starts.
-
-**Locally (2 cookies for smoke testing):**
-
 ```bash
-cd /Users/nitinmali/workspace/farming/core-services-performance-tests/auth
-LOCAL=true \
-  CW_FRONTEND_URL=https://fg-cw-frontend.perf-test.cdp-int.defra.cloud \
+cd /Users/nitinmali/workspace/farming/core-services-performance-tests
+CW_FRONTEND_URL=https://fg-cw-frontend.perf-test.cdp-int.defra.cloud \
   ENTRA_ID_WRITER_USER=SA-FGCW.WRITER@defra.onmicrosoft.com \
   ENTRA_ID_USER_PASSWORD='REDACTED-HISTORICAL-CREDENTIAL' \
-  OUTPUT_FILE=/Users/nitinmali/workspace/farming/core-services-performance-tests/src/data/frps-session-cookies.csv \
-  sh generate-multiple-cookies.sh 2
+  SESSION_COUNT=5 \
+  OUTPUT_FILE=src/data/frps-session-cookies.csv \
+  npm run generate-cookies
 ```
 
-`LOCAL=true` skips the `localhost:3128` proxy and runs the browser with a visible window. Use `DEBUG=true` for the same but with a 1-hour test timeout.
-
-In CDP the entrypoint generates 25 cookies automatically (`SESSION_COUNT` env var, default 25).
-
-The WMP and FRPS scripts share `src/data/frps-session-cookies.csv`. Cookies expire after 4 hours — regenerate immediately before running.
+The WMP script shares the same cookie file as FRPS. Cookies expire after 4 hours — regenerate immediately before running.
 
 ### Step 3 — Run locally (1 iteration smoke test)
 
