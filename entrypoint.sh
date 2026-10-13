@@ -20,16 +20,11 @@ fi
 echo "========================================"
 echo "Generating CW session cookies"
 echo "========================================"
-echo "Checking Microsoft CDN reachability..."
-curl -sS -v --proxy http://127.0.0.1:3128 --noproxy '' --max-time 15 -o /dev/null \
-  https://aadcdn.msauth.net/ 2>&1 | grep -E 'CONNECT|< HTTP|< [Ll]ocation|curl:'
-echo "CDP_HTTPS_PROXY: ${CDP_HTTPS_PROXY}"
-export PLAYWRIGHT_PROXY_SERVER="${CDP_HTTPS_PROXY:-http://localhost:3128}"
-echo "Browser proxy: ${PLAYWRIGHT_PROXY_SERVER}"
+
 CW_FRONTEND_URL="https://${CW_FRONTEND_BASE_URL}" \
-  SESSION_COUNT="${SESSION_COUNT:-25}" \
   OUTPUT_FILE=/app/src/data/frps-session-cookies.csv \
-  node /app/scripts/generate-session-cookies.js
+  sh /app/auth/generate-multiple-cookies.sh "${SESSION_COUNT:-25}"
+
 if [ $? -ne 0 ]; then
   echo "ERROR: Failed to generate session cookies"
   exit 1
