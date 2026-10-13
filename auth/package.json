@@ -1,7 +1,8 @@
 {
   "type": "module",
   "scripts": {
-    "generate-cookie": "PATH=\"$PWD/node_modules/chromedriver/lib/chromedriver:$PATH\" wdio run wdio.entra.conf.js"
+    "generate-cookie": "PATH=\"$PWD/node_modules/chromedriver/lib/chromedriver:$PATH\" wdio run wdio.entra.conf.js",
+    "generate-cookie-http": "node scripts/generate-cookie-http.mjs"
   },
   "devDependencies": {
     "@wdio/cli": "^9.23.0",
