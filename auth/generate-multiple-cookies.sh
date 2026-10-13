@@ -21,7 +21,7 @@ i=1
 while [ "$i" -le "$COUNT" ]; do
   echo ""
   echo "=== Cookie $i/$COUNT ==="
-  OUTPUT_FILE="$OUTPUT_FILE" npm run generate-cookie
+  OUTPUT_FILE="$OUTPUT_FILE" npm run generate-cookie-http
 
   if [ $? -ne 0 ]; then
     echo "ERROR: Failed to generate cookie $i"
