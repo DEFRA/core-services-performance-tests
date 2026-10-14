@@ -101,6 +101,30 @@ docker run -e S3_ENDPOINT='http://host.docker.internal:4566' -e RESULTS_OUTPUT_S
 
 ---
 
+## CDP Squid Proxy — Required Domain Allowlist
+
+The CDP squid proxy blocks all outbound traffic by default. The Microsoft Entra ID login flow requires access to CDN domains that are not on the default allowlist. Without these, the browser-based login form will never render.
+
+Add the following to `cdp-tenant-config/environments/perf-test/squid/core-services-performance-tests.json`:
+
+```json
+{
+  "allowed_ports": [],
+  "allowed_domains": [
+    "aadcdn.msauth.net",
+    "aadcdn.msftauth.net",
+    "www.office.com",
+    "login.live.com"
+  ]
+}
+```
+
+`login.microsoftonline.com` is already on the CDP default allowlist and does not need to be added.
+
+Raise a PR against `cdp-tenant-config` and post the link in `#cdp-support` on Slack for the platform team to review and deploy.
+
+---
+
 ## WMP Full Journey — Prerequisites & Gotchas
 
 ### What the script does
