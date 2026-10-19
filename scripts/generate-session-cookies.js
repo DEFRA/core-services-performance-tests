@@ -153,7 +153,19 @@ async function main() {
   console.log(`  Out:  ${OUTPUT_FILE}`);
   console.log('');
 
-  const browser = await chromium.launch({ headless: HEADLESS });
+  // In CDP, route browser traffic through the local squid sidecar so that
+  // login.microsoftonline.com and aadcdn.msauth.net are reachable.
+  // HTTPS_PROXY is only set in CDP (via entrypoint.sh) — not set locally.
+  const proxy = process.env.HTTPS_PROXY
+    ? { server: 'http://localhost:3128', bypass: '.cdp-int.defra.cloud,localhost,127.0.0.1' }
+    : undefined;
+
+  const browser = await chromium.launch({
+    headless: HEADLESS,
+    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+    args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-setuid-sandbox'],
+    proxy,
+  });
 
   const cookies = [];
 
