@@ -162,13 +162,13 @@ Run from the repo root:
 
 ```bash
 CW_FRONTEND_URL=https://fg-cw-frontend.perf-test.cdp-int.defra.cloud \
-  ENTRA_ID_WRITER_USER=SA-FGCW.WRITER@defra.onmicrosoft.com \
-  ENTRA_ID_USER_PASSWORD='REDACTED-HISTORICAL-CREDENTIAL' \
+  ENTRA_ID_WRITER_USER="${ENTRA_ID_WRITER_USER}" \
+  ENTRA_ID_USER_PASSWORD="${ENTRA_ID_USER_PASSWORD}" \
   SESSION_COUNT=25 \
   npm run generate-cookies:frps
 ```
 
-The WMP script shares the same cookie file as FRPS. Cookies expire after 4 hours — regenerate immediately before running.
+The WMP script shares the same cookie file as FRPS. Generate fresh cookies immediately before running; session lifetime is controlled by the test environment.
 
 ### Step 3 — Run locally (1 iteration smoke test)
 
@@ -177,7 +177,7 @@ mkdir -p reports/wmp && \
 k6 run --vus 1 --iterations 1 \
   -e GAS_BASE_URL=ephemeral-protected.api.perf-test.cdp-int.defra.cloud/fg-gas-backend \
   -e GAS_API_KEY=<your-developer-api-key> \
-  -e GAS_BEARER_TOKEN=REDACTED-HISTORICAL-CREDENTIAL \
+  -e GAS_BEARER_TOKEN="${GAS_BEARER_TOKEN}" \
   -e CW_FRONTEND_BASE_URL=fg-cw-frontend.perf-test.cdp-int.defra.cloud \
   -e CW_ASSIGNED_USER_ID=69c2749c461dcb042523bd16 \
   -e REPORTS_DIR=reports/wmp \
@@ -229,3 +229,15 @@ information providers in the public sector to license the use and re-use of thei
 licence.
 
 It is designed to encourage use and re-use of information freely and flexibly, with only a few conditions.
+
+## Runtime authentication material
+
+Supply `ENTRA_ID_WRITER_USER`, `ENTRA_ID_USER_PASSWORD` and `GAS_BEARER_TOKEN` through CDP secrets or a local secret-backed environment. Do not put their values in source, command examples or reports.
+
+The container generates fresh session cookies before starting k6, rejects a missing or empty cookie pool, and removes its runtime CSV when it exits. Generated `src/data/*session-cookies.csv` files are excluded from Git and the Docker build context.
+
+For a direct local k6 run, first set the required environment variables and `CW_FRONTEND_URL`, then run `npm run generate-cookies:frps`. Both full-journey scenarios read that generated file. Remove it after local testing. A missing bearer token or invalid cookie pool stops initialisation.
+
+The committed applicants and address/land examples are synthetic. The performance-test environment must provide matching synthetic land data for parcel validation.
+
+Run the isolated startup and authentication regression checks with `npm test`. These checks use test-only credentials and do not contact Entra or run a load test.
