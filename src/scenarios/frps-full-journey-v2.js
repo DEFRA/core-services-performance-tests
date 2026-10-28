@@ -40,17 +40,18 @@
  *   GAS_BASE_URL        Local only: ephemeral-protected.api.perf-test.cdp-int.defra.cloud/fg-gas-backend
  *                       If unset, uses CDP direct URL automatically.
  *   GAS_API_KEY         Local only: your developer API key. Not required in CDP (omit entirely).
- *   GAS_BEARER_TOKEN    Fixed bearer token. Defaults to perf-test value.
+ *   GAS_BEARER_TOKEN    Required bearer token from environment secrets.
  *   CW_FRONTEND_BASE_URL  Defaults to perf-test CW frontend URL.
  *   CW_ASSIGNED_USER_ID   Defaults to perf-test caseworker ID.
  *
- * Login used: SA-FGCW.WRITER@defra.onmicrosoft.com (session cookie from CSV).
+ * Login used: configured Entra test account (fresh session cookie from CSV).
  */
 import http from 'k6/http';
 import { sleep } from 'k6';
 import { SharedArray } from 'k6/data';
 import { assertStatus } from '../lib/checks.js';
 import { handleSummary } from '../lib/report.js';
+import { requiredEnvironmentValue, parseSessionCookies } from '../lib/runtime-inputs.js';
 
 export { handleSummary };
 
@@ -64,8 +65,8 @@ const GAS_URL = __ENV.GAS_BASE_URL
 // API key: local only — set GAS_API_KEY to your developer key. Not needed in CDP.
 const GAS_API_KEY = __ENV.GAS_API_KEY || null;
 
-// Fixed bearer token — same value everywhere
-const GAS_BEARER_TOKEN = __ENV.GAS_BEARER_TOKEN || '99731eaa-43e6-44fe-a18c-25385c1a3a93';
+// The bearer token is supplied through environment secrets.
+const GAS_BEARER_TOKEN = requiredEnvironmentValue(__ENV, 'GAS_BEARER_TOKEN');
 
 const CW_FRONTEND_URL = `https://${__ENV.CW_FRONTEND_BASE_URL || 'fg-cw-frontend.perf-test.cdp-int.defra.cloud'}`;
 const ASSIGNED_USER_ID = __ENV.CW_ASSIGNED_USER_ID || '69c2749c461dcb042523bd16';
@@ -75,11 +76,7 @@ const CASE_POLL_TIMEOUT_S = 300;
 const CASE_POLL_INTERVAL_S = 5;
 
 const sessionCookies = new SharedArray('frps-session-cookies', () =>
-  open('../data/frps-session-cookies.csv')
-    .split('\n')
-    .slice(1)
-    .filter(Boolean)
-    .map((line) => line.trim()),
+  parseSessionCookies(open('../data/frps-session-cookies.csv')),
 );
 
 const applicants = new SharedArray('frps-applicants', () =>
@@ -202,8 +199,8 @@ function submitApplication(clientRef, applicant) {
             description: 'A consent is required from Natural England',
             metadata: {
               actionCode: 'UPL1',
-              parcelId: '7656',
-              sheetId: 'SD6352',
+              parcelId: '0118',
+              sheetId: 'AA0110',
               percentageOverlap: 2.14,
               overlapAreaHectares: 0.0336,
             },
@@ -219,14 +216,14 @@ function submitApplication(clientRef, applicant) {
           landlinePhoneNumber: '01235000000',
           name: applicant.name,
           address: {
-            line1: 'Benbrigge House - line 1',
-            line2: 'ALBRIGHTON - line 2',
-            line3: 'Cuckoo Hill Farm - line 3',
-            line4: 'Cuckoo Hill Farm -line 4',
-            line5: 'Farm road -line 5',
-            street: 'BRIDGE ROAD - Street',
-            city: 'GRIMSBY - City',
-            postalCode: 'DY13 0UY',
+            line1: '1 Test Lane',
+            line2: 'Test Village',
+            line3: 'Test Locality',
+            line4: 'Test Area',
+            line5: 'Test County',
+            street: 'Test Lane',
+            city: 'Exampleton',
+            postalCode: 'ZZ99 5ZZ',
           },
         },
         customer: {
@@ -237,8 +234,8 @@ function submitApplication(clientRef, applicant) {
       application: {
         parcel: [
           {
-            sheetId: 'SK0971',
-            parcelId: '7555',
+            sheetId: 'AA0108',
+            parcelId: '0114',
             area: { unit: 'ha', quantity: 5.2182 },
             actions: [
               { code: 'CMOR1', version: '1', durationYears: 3, appliedFor: { unit: 'ha', quantity: 4.7575 } },
@@ -246,8 +243,8 @@ function submitApplication(clientRef, applicant) {
             ],
           },
           {
-            sheetId: 'SK0971',
-            parcelId: '9194',
+            sheetId: 'AA0108',
+            parcelId: '0116',
             area: { unit: 'ha', quantity: 2.1703 },
             actions: [
               { code: 'CMOR1', version: '1', durationYears: 3, appliedFor: { unit: 'ha', quantity: 2.1705 } },
@@ -260,8 +257,8 @@ function submitApplication(clientRef, applicant) {
       payments: {
         parcel: [
           {
-            sheetId: 'SK0971',
-            parcelId: '7555',
+            sheetId: 'AA0108',
+            parcelId: '0114',
             area: { unit: 'ha', quantity: 5.2182 },
             actions: [
               { code: 'CMOR1', description: 'Assess moorland and produce a written record', durationYears: 3, paymentRates: 1060, annualPaymentPence: 5042, eligible: { unit: 'ha', quantity: 4.7575 }, appliedFor: { unit: 'ha', quantity: 4.7575 } },
@@ -269,8 +266,8 @@ function submitApplication(clientRef, applicant) {
             ],
           },
           {
-            sheetId: 'SK0971',
-            parcelId: '9194',
+            sheetId: 'AA0108',
+            parcelId: '0116',
             area: { unit: 'ha', quantity: 2.1703 },
             actions: [
               { code: 'CMOR1', description: 'Assess moorland and produce a written record', durationYears: 3, paymentRates: 1060, annualPaymentPence: 2300, eligible: { unit: 'ha', quantity: 2.1705 }, appliedFor: { unit: 'ha', quantity: 2.1705 } },
@@ -286,7 +283,7 @@ function submitApplication(clientRef, applicant) {
   });
 
   const url = `${GAS_URL}/grants/frps-private-beta/applications`;
-  console.log(`[VU=${__VU}] POST ${url} | clientRef=${clientRef} sbi=${applicant.sbi} crn=${applicant.crn}`);
+  console.log(`[VU=${__VU}] POST ${url} | clientRef=${clientRef}`);
 
   const res = http.post(url, payload, {
     headers: gasHeaders(),
@@ -418,7 +415,7 @@ export default function () {
   const runId = Math.floor(Date.now() / 1000);
   const clientRef = `frps-perf-${runId}-${__VU}-${__ITER}`;
 
-  console.log(`[VU=${__VU}] === Starting FRPS full journey v2 | clientRef=${clientRef} sbi=${applicant.sbi} crn=${applicant.crn} name="${applicant.name}" ===`);
+  console.log(`[VU=${__VU}] === Starting FRPS full journey v2 | clientRef=${clientRef} ===`);
   console.log(`[VU=${__VU}] GAS_URL=${GAS_URL} CW_FRONTEND_URL=${CW_FRONTEND_URL}`);
   console.log(`[VU=${__VU}] Session (first 60 chars): ${sessionValue ? sessionValue.substring(0, 60) : 'MISSING'}...`);
 

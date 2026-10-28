@@ -6,7 +6,8 @@
   "scripts": {
     "generate-cookies": "node scripts/generate-session-cookies.js",
     "generate-cookies:frps": "OUTPUT_FILE=src/data/frps-session-cookies.csv node scripts/generate-session-cookies.js",
-    "generate-cookies:wmp": "OUTPUT_FILE=src/data/wmp-session-cookies.csv node scripts/generate-session-cookies.js"
+    "generate-cookies:wmp": "OUTPUT_FILE=src/data/wmp-session-cookies.csv node scripts/generate-session-cookies.js",
+    "test": "node --experimental-vm-modules --test test/*.test.js"
   },
   "dependencies": {
     "playwright": "^1.49.0"

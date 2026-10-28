@@ -1,3 +1,4 @@
+import { requiredEnvironmentValue } from '../lib/runtime-inputs.js';
 /**
  * WMP Applicant Journey
  *
@@ -18,7 +19,7 @@ export { handleSummary };
 
 const GAS_URL = `https://${__ENV.GAS_BASE_URL}`;
 const GAS_API_KEY = __ENV.GAS_API_KEY;
-const GAS_BEARER_TOKEN = __ENV.GAS_BEARER_TOKEN;
+const GAS_BEARER_TOKEN = requiredEnvironmentValue(__ENV, 'GAS_BEARER_TOKEN');
 
 const applicants = new SharedArray('frps-applicants', () =>
   JSON.parse(open('../data/frps-applicants.json')),
@@ -109,9 +110,9 @@ function submitApplication(clientRef, applicant) {
       hectaresTenOrOverYearsOld: 6,
       hectaresUnderTenYearsOld: 4,
       woodlandName: 'Test Woodland',
-      centreGridReference: 'SK512347',
+      centreGridReference: 'NG12345678',
       fcTeamCode: 'SOUTH_WEST',
-      landParcels: [{ parcelId: 'NT8701-9412', areaHa: 10.0 }],
+      landParcels: [{ parcelId: 'AA0001-0001', areaHa: 10.0 }],
       applicant: {
         business: {
           name: applicant.name,
@@ -119,14 +120,14 @@ function submitApplication(clientRef, applicant) {
           email: `perf-test+${applicant.sbi}@example.test`,
           phone: '02011223344',
           address: {
-            line1: '1 Moorfield',
-            line2: 'Glossop',
+            line1: '1 Test Lane',
+            line2: 'Test Village',
             line3: null,
             line4: null,
             line5: null,
-            street: '1 Moorfield',
-            city: 'Chesham',
-            postalCode: 'SK13 5CB',
+            street: '1 Test Lane',
+            city: 'Exampleton',
+            postalCode: 'ZZ99 5ZZ',
           },
         },
         customer: {
@@ -142,8 +143,7 @@ function submitApplication(clientRef, applicant) {
   });
 
   const url = `${GAS_URL}/grants/woodland/applications`;
-  console.log(`[VU=${__VU}] POST ${url} | clientRef=${clientRef} sbi=${applicant.sbi} crn=${applicant.crn}`);
-  console.log(`[VU=${__VU}] Request payload: ${payload}`);
+  console.log(`[VU=${__VU}] POST ${url} | clientRef=${clientRef}`);
 
   const res = http.post(url, payload, {
     headers: gasHeaders(),
@@ -161,7 +161,7 @@ export default function () {
   const runId = Math.floor(Date.now() / 1000);
   const clientRef = `wmp-perf-${runId}-${__VU}-${__ITER}`;
 
-  console.log(`[VU=${__VU}] === Starting WMP journey | clientRef=${clientRef} sbi=${applicant.sbi} crn=${applicant.crn} name="${applicant.name}" ===`);
+  console.log(`[VU=${__VU}] === Starting WMP journey | clientRef=${clientRef} ===`);
   console.log(`[VU=${__VU}] GAS_URL=${GAS_URL}`);
 
   if (!submitApplication(clientRef, applicant)) {
