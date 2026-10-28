@@ -148,7 +148,7 @@ async function generateSession(browser, index) {
 
 async function main() {
   console.log(`Generating ${SESSION_COUNT} CW session cookies`);
-  console.log(`  User: ${USERNAME}`);
+  console.log(`  User: [redacted]`);
   console.log(`  URL:  ${CW_URL}`);
   console.log(`  Out:  ${OUTPUT_FILE}`);
   console.log('');
