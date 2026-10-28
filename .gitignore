@@ -13,3 +13,6 @@ coverage
 jmeter.log
 report.csv
 reports/
+
+# Session cookies are generated at runtime and must never be committed or baked in.
+src/data/*session-cookies.csv

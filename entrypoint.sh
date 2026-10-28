@@ -10,6 +10,16 @@ if [ -n "$CDP_HTTP_PROXY" ]; then
 fi
 
 REPORTS_DIR=/app/reports
+COOKIE_FILE=/app/src/data/frps-session-cookies.csv
+
+# Never reuse a cookie file from an earlier run or leave it behind afterwards.
+trap 'rm -f "$COOKIE_FILE"' EXIT
+rm -f "$COOKIE_FILE"
+
+if [ -z "${GAS_BEARER_TOKEN}" ]; then
+  echo "ERROR: GAS_BEARER_TOKEN is required"
+  exit 1
+fi
 
 # Generate CW session cookies before running k6 scenarios
 if [ -z "${ENTRA_ID_WRITER_USER}" ] || [ -z "${ENTRA_ID_USER_PASSWORD}" ]; then
@@ -28,6 +38,9 @@ CW_FRONTEND_URL="https://${CW_FRONTEND_BASE_URL}" \
 
 if [ $? -ne 0 ]; then
   echo "ERROR: Failed to generate session cookies"
+  exit 1
+fi
+if ! node /app/scripts/validate-session-cookies.js "$COOKIE_FILE"; then
   exit 1
 fi
 echo "Session cookies generated"

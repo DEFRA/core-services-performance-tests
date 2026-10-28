@@ -1,9 +1,46 @@
 # core-services-performance-tests
 
-A JMeter based test runner for the CDP Platform.
+A k6 performance test suite for FRPS and WMP on the CDP Platform. Playwright obtains the caseworker session cookies used by the tests.
 
 - [Licence](#licence)
   - [About the licence](#about-the-licence)
+
+## Developer / QA setup checklist
+
+### Required environment secrets
+
+| Variable | What to supply | Change in this cleanup |
+| --- | --- | --- |
+| `ENTRA_ID_WRITER_USER` | Approved Entra test-account username | Already required for runtime login |
+| `ENTRA_ID_USER_PASSWORD` | That account's current password, from the secret store | Already required for runtime login |
+| `GAS_BEARER_TOKEN` | A valid GAS token for the target test environment, from the secret store | Now required explicitly; the committed fallback has been removed |
+
+Configure these on the CDP test suite for the environment being run, or export them securely for local testing. Do not copy the old credential examples from Git history. The owners should verify whether exposed credentials remain active and revoke/replace them where needed.
+
+### Environment and test data
+
+- Use an Entra account with the caseworker permissions needed by the journeys. If the existing caseworker ID does not apply, set `CW_ASSIGNED_USER_ID` to the intended test caseworker's CW user ID.
+- `CW_FRONTEND_BASE_URL` is a hostname without `https://`. The Docker image defaults to `fg-cw-frontend.perf-test.cdp-int.defra.cloud`.
+- For direct local cookie generation, `CW_FRONTEND_URL` is the full URL including `https://`.
+- For local GAS access, set `GAS_BASE_URL` to the accessible host/path without `https://`, and provide `GAS_API_KEY` when using the developer gateway. In CDP the scenarios default to the direct perf-test GAS service URL.
+- Check the existing Squid allowlist section below if Entra login is blocked. The image already contains Chromium; direct local generation needs Node.js, the npm dependencies and Playwright Chromium installed.
+- Confirm the target environment supports the synthetic applicants and parcels in the fixtures, including `AA0108-0114`, `AA0108-0116` and woodland parcel `AA0001-0001`. Check `WOODLAND_CONFIG_VERSION` against the deployed grant configuration as described below.
+- `SESSION_COUNT` is optional; container startup defaults to 25 fresh sessions.
+
+### Running
+
+For CDP, build/publish the updated image through the existing main-branch workflow, confirm the secrets above are configured, and run the suite from the CDP Portal. Startup generates the cookie CSV, validates it, runs both scenarios and removes the CSV on exit. No committed cookie file needs to be restored or manually uploaded.
+
+For a direct local run, install the dependencies and browser first:
+
+```bash
+npm ci
+npx playwright install chromium
+```
+
+Then set the required environment values, generate cookies with `npm run generate-cookies:frps`, and follow the local k6 steps below. A local k6 installation and access to the target services are required. Remove the generated CSV after local testing.
+
+Run `npm test` for the isolated startup/authentication regression checks. These need no real credentials and do not contact Entra or run load requests. They do not replace a live authentication check in the configured test environment.
 
 ## Build
 
@@ -14,6 +51,12 @@ A successful build results in a Docker container that is capable of running your
 
 The performance test suites are designed to be run from the CDP Portal.
 The CDP Platform runs test suites in much the same way it runs any other service, it takes a docker image and runs it as an ECS task, automatically provisioning infrastructure as required.
+
+<details>
+<summary>Legacy Compose and LocalStack template examples</summary>
+
+> [!IMPORTANT]
+> These examples are retained from the original template. Compose still contains a placeholder service image, does not pass the required authentication variables and uses a report mount that differs from the current `/app/reports` path. It is not a ready-to-run setup for this suite. Customise it before use; the CDP setup and direct local k6 instructions describe the current authentication flow.
 
 ## Local Testing with Docker Compose
 
@@ -101,6 +144,8 @@ docker run -e S3_ENDPOINT='http://host.docker.internal:4566' -e RESULTS_OUTPUT_S
 
 ---
 
+</details>
+
 ## CDP Squid Proxy — Required Domain Allowlist
 
 The CDP squid proxy blocks all outbound traffic by default. The Microsoft Entra ID login flow requires access to CDN domains that are not on the default allowlist. Without these, the browser-based login form will never render.
@@ -162,13 +207,13 @@ Run from the repo root:
 
 ```bash
 CW_FRONTEND_URL=https://fg-cw-frontend.perf-test.cdp-int.defra.cloud \
-  ENTRA_ID_WRITER_USER=SA-FGCW.WRITER@defra.onmicrosoft.com \
-  ENTRA_ID_USER_PASSWORD='REDACTED-HISTORICAL-CREDENTIAL' \
+  ENTRA_ID_WRITER_USER="${ENTRA_ID_WRITER_USER}" \
+  ENTRA_ID_USER_PASSWORD="${ENTRA_ID_USER_PASSWORD}" \
   SESSION_COUNT=25 \
   npm run generate-cookies:frps
 ```
 
-The WMP script shares the same cookie file as FRPS. Cookies expire after 4 hours — regenerate immediately before running.
+The WMP script shares the same cookie file as FRPS. Generate fresh cookies immediately before running; session lifetime is controlled by the test environment.
 
 ### Step 3 — Run locally (1 iteration smoke test)
 
@@ -177,7 +222,7 @@ mkdir -p reports/wmp && \
 k6 run --vus 1 --iterations 1 \
   -e GAS_BASE_URL=ephemeral-protected.api.perf-test.cdp-int.defra.cloud/fg-gas-backend \
   -e GAS_API_KEY=<your-developer-api-key> \
-  -e GAS_BEARER_TOKEN=REDACTED-HISTORICAL-CREDENTIAL \
+  -e GAS_BEARER_TOKEN="${GAS_BEARER_TOKEN}" \
   -e CW_FRONTEND_BASE_URL=fg-cw-frontend.perf-test.cdp-int.defra.cloud \
   -e CW_ASSIGNED_USER_ID=69c2749c461dcb042523bd16 \
   -e REPORTS_DIR=reports/wmp \
@@ -229,3 +274,15 @@ information providers in the public sector to license the use and re-use of thei
 licence.
 
 It is designed to encourage use and re-use of information freely and flexibly, with only a few conditions.
+
+## Runtime authentication material
+
+Supply `ENTRA_ID_WRITER_USER`, `ENTRA_ID_USER_PASSWORD` and `GAS_BEARER_TOKEN` through CDP secrets or a local secret-backed environment. Do not put their values in source, command examples or reports.
+
+The container generates fresh session cookies before starting k6, rejects a missing or empty cookie pool, and removes its runtime CSV when it exits. Generated `src/data/*session-cookies.csv` files are excluded from Git and the Docker build context.
+
+For a direct local k6 run, first set the required environment variables and `CW_FRONTEND_URL`, then run `npm run generate-cookies:frps`. Both full-journey scenarios read that generated file. Remove it after local testing. A missing bearer token or invalid cookie pool stops initialisation.
+
+The committed applicants and address/land examples are synthetic. The performance-test environment must provide matching synthetic land data for parcel validation.
+
+Run the isolated startup and authentication regression checks with `npm test`. These checks use test-only credentials and do not contact Entra or run a load test.
