@@ -42,7 +42,7 @@ echo "========================================"
 CW_FRONTEND_URL="https://${CW_FRONTEND_BASE_URL}" \
   OUTPUT_FILE=/app/src/data/frps-session-cookies.csv \
   SESSION_COUNT="${SESSION_COUNT:-25}" \
-  npm run generate-cookies:frps
+  npm run generate-cookies
 
 if [ $? -ne 0 ]; then
   echo "ERROR: Failed to generate session cookies"
