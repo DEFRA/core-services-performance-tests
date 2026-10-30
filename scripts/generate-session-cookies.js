@@ -22,6 +22,7 @@
  *   HEADLESS               set to "false" to watch the browser (default: true)
  */
 
+import 'dotenv/config';
 import { chromium } from 'playwright';
 import { writeFileSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
@@ -35,7 +36,7 @@ const CW_URL = process.env.CW_FRONTEND_URL;
 const USERNAME = process.env.ENTRA_ID_WRITER_USER;
 const PASSWORD = process.env.ENTRA_ID_USER_PASSWORD;
 const SESSION_COUNT = parseInt(process.env.SESSION_COUNT ?? '10', 10);
-const OUTPUT_FILE = process.env.OUTPUT_FILE ?? `${__dirname}/../src/data/cw-session-cookies.csv`;
+const OUTPUT_FILE = process.env.OUTPUT_FILE ?? `${__dirname}/../src/data/frps-session-cookies.csv`;
 const HEADLESS = process.env.HEADLESS !== 'false';
 
 const LOGIN_TIMEOUT = 30_000;

@@ -93,11 +93,9 @@ export const options = {
     wmp_full_journey: {
       executor: 'ramping-vus',
       startVUs: 0,
-      stages: [
-        { duration: '5m',  target: 5 },
-        { duration: '50m', target: 5 },
-        { duration: '5m',  target: 0 },
-      ],
+      stages: __ENV.K6_QUICK_RUN
+        ? [{ duration: '1m', target: 2 }, { duration: '3m', target: 2 }, { duration: '1m', target: 0 }]
+        : [{ duration: '5m', target: 5 }, { duration: '50m', target: 5 }, { duration: '5m', target: 0 }],
     },
   },
   thresholds: {
@@ -190,11 +188,11 @@ function uuidv4() {
 
 function logStep(label, res, fullBody) {
   const location = res.headers['Location'] ? ` → ${res.headers['Location']}` : '';
-  console.log(`[VU=${__VU}] ${label} | status=${res.status}${location}`);
+  // console.log(`[VU=${__VU}] ${label} | status=${res.status}${location}`);
   if (res.body && res.body.length > 0) {
     const limit = fullBody ? res.body.length : 500;
     const snippet = res.body.length > limit ? res.body.substring(0, limit) + '...(truncated)' : res.body;
-    console.log(`[VU=${__VU}] ${label} | body=${snippet}`);
+    // console.log(`[VU=${__VU}] ${label} | body=${snippet}`);
   }
 }
 
@@ -275,7 +273,7 @@ function createOrGetTestAgreement(clientRef, applicant) {
   }
   const body = JSON.parse(res.body);
   const agreementNumber = body.agreementData && body.agreementData.agreementNumber;
-  console.log(`[VU=${__VU}] Agreement ready: ${agreementNumber} state=${body.agreementData && body.agreementData.state}`);
+  // console.log(`[VU=${__VU}] Agreement ready: ${agreementNumber} state=${body.agreementData && body.agreementData.state}`);
   return agreementNumber;
 }
 
@@ -308,9 +306,9 @@ function getCurrentAgreement(clientRef, applicant) {
   let etag = res.headers['ETag'] || res.headers['etag'] || res.headers['Etag'];
   if (!etag && agreementNumber && version !== undefined) {
     etag = `"${agreementNumber}:${version}:${WOODLAND_CONFIG_VERSION}"`;
-    console.log(`[VU=${__VU}] GetCurrentAgreement ETag header absent — constructed: ${etag}`);
+    // console.log(`[VU=${__VU}] GetCurrentAgreement ETag header absent — constructed: ${etag}`);
   }
-  console.log(`[VU=${__VU}] GetCurrentAgreement agreementNumber=${agreementNumber} state=${body.agreement && body.agreement.state} etag=${etag}`);
+  // console.log(`[VU=${__VU}] GetCurrentAgreement agreementNumber=${agreementNumber} state=${body.agreement && body.agreement.state} etag=${etag}`);
   return { agreementNumber, etag };
 }
 
@@ -334,7 +332,7 @@ function acceptAgreement(agreementNumber, applicant, etag) {
   logStep('AcceptAgreement', res);
 
   if (res.status === 303) {
-    console.log(`[VU=${__VU}] Agreement ${agreementNumber} accepted successfully`);
+    // console.log(`[VU=${__VU}] Agreement ${agreementNumber} accepted successfully`);
     return true;
   }
   console.error(`[VU=${__VU}] AcceptAgreement returned status=${res.status} (expected 303)`);
@@ -419,7 +417,7 @@ function submitApplication(clientRef, applicant) {
   });
 
   const url = `${GAS_URL}/grants/woodland/applications`;
-  console.log(`[VU=${__VU}] POST ${url} | clientRef=${clientRef}`);
+  // console.log(`[VU=${__VU}] POST ${url} | clientRef=${clientRef}`);
 
   const res = http.post(url, payload, {
     headers: gasHeaders(),
@@ -448,7 +446,7 @@ function waitForAgreementReady(caseId) {
   const deadline = Date.now() + AGREEMENT_READY_TIMEOUT_S * 1000;
   const url = `${CW_FRONTEND_URL}/cases/${caseId}`;
 
-  console.log(`[VU=${__VU}] Polling case ${caseId} for STATUS_AGREEMENT_READY_FOR_APPLICANT (timeout=${AGREEMENT_READY_TIMEOUT_S}s)`);
+  // console.log(`[VU=${__VU}] Polling case ${caseId} for STATUS_AGREEMENT_READY_FOR_APPLICANT (timeout=${AGREEMENT_READY_TIMEOUT_S}s)`);
 
   while (Date.now() < deadline) {
     const res = http.get(url, {
@@ -465,12 +463,12 @@ function waitForAgreementReady(caseId) {
     if (res.status === 200) {
       // TASK_AGREEMENT_DELIVERY_TO_APPLICANT link appears only in STAGE_PREPARING_AGREEMENT
       if (res.body.indexOf('TASK_AGREEMENT_DELIVERY_TO_APPLICANT') !== -1) {
-        console.log(`[VU=${__VU}] Agreement ready — TASK_AGREEMENT_DELIVERY_TO_APPLICANT found in case page`);
+        // console.log(`[VU=${__VU}] Agreement ready — TASK_AGREEMENT_DELIVERY_TO_APPLICANT found in case page`);
         return true;
       }
       // Still generating — log and retry
       const generating = res.body.indexOf('AGREEMENT_GENERATING') !== -1 || res.body.indexOf('Generating draft agreement') !== -1;
-      console.log(`[VU=${__VU}] Agreement not ready yet (generating=${generating}) — retrying in ${AGREEMENT_READY_INTERVAL_S}s`);
+      // console.log(`[VU=${__VU}] Agreement not ready yet (generating=${generating}) — retrying in ${AGREEMENT_READY_INTERVAL_S}s`);
     } else {
       console.warn(`[VU=${__VU}] PollAgreementReady unexpected status=${res.status}`);
     }
@@ -493,7 +491,7 @@ function waitForCase(clientRef) {
   const url = `${CW_FRONTEND_URL}/cases?search=${clientRef}`;
   const caseIdPattern = /\/cases\/([a-f0-9]{24})/;
 
-  console.log(`[VU=${__VU}] Polling ${url} every ${CASE_POLL_INTERVAL_S}s (timeout=${CASE_POLL_TIMEOUT_S}s)`);
+  // console.log(`[VU=${__VU}] Polling ${url} every ${CASE_POLL_INTERVAL_S}s (timeout=${CASE_POLL_TIMEOUT_S}s)`);
 
   while (Date.now() < deadline) {
     const res = http.get(url, {
@@ -502,7 +500,7 @@ function waitForCase(clientRef) {
       tags: { name: 'PollCaseSearch' },
     });
 
-    console.log(`[VU=${__VU}] PollCaseSearch status=${res.status} url=${res.url}`);
+    // console.log(`[VU=${__VU}] PollCaseSearch status=${res.status} url=${res.url}`);
 
     // Detect session expiry — redirected to Microsoft login
     if (res.url && res.url.indexOf('login.microsoftonline.com') !== -1) {
@@ -513,11 +511,11 @@ function waitForCase(clientRef) {
     if (res.status === 200) {
       const match = res.body.match(caseIdPattern);
       if (match) {
-        console.log(`[VU=${__VU}] Found case [clientRef=${clientRef}] → caseId=${match[1]}`);
+        // console.log(`[VU=${__VU}] Found case [clientRef=${clientRef}] → caseId=${match[1]}`);
         return match[1];
       }
       const snippet = res.body.length > 800 ? res.body.substring(0, 800) : res.body;
-      console.log(`[VU=${__VU}] No caseId yet. Snippet: ${snippet}`);
+      // console.log(`[VU=${__VU}] No caseId yet. Snippet: ${snippet}`);
     } else {
       console.warn(`[VU=${__VU}] Unexpected status=${res.status} body=${res.body.substring(0, 300)}`);
     }
@@ -546,31 +544,31 @@ export default function () {
   const clientRef = `wmp-perf-${runId}-${__VU}-${__ITER}`;
 
   console.log(`[VU=${__VU}] === Starting WMP full journey | clientRef=${clientRef} ===`);
-  console.log(`[VU=${__VU}] GAS_URL=${GAS_URL} CW_FRONTEND_URL=${CW_FRONTEND_URL}`);
-  console.log(`[VU=${__VU}] Session (first 60 chars): ${sessionValue ? sessionValue.substring(0, 60) : 'MISSING'}...`);
+  // console.log(`[VU=${__VU}] GAS_URL=${GAS_URL} CW_FRONTEND_URL=${CW_FRONTEND_URL}`);
+  // console.log(`[VU=${__VU}] Session (first 60 chars): ${sessionValue ? sessionValue.substring(0, 60) : 'MISSING'}...`);
 
   // ── Phase 1: Submit application to GAS ──────────────────────────────────────
   if (!submitApplication(clientRef, applicant)) {
     console.error(`[VU=${__VU}] FAILED at Phase 1: GAS application submission`);
     return;
   }
-  console.log(`[VU=${__VU}] Phase 1 complete: WMP application submitted clientRef=${clientRef}`);
+  // console.log(`[VU=${__VU}] Phase 1 complete: WMP application submitted clientRef=${clientRef}`);
 
   // Simulate application sitting in the queue before a caseworker picks it up
-  console.log(`[VU=${__VU}] Think time: application submitted — waiting 10s before caseworker picks it up`);
+  // console.log(`[VU=${__VU}] Think time: application submitted — waiting 10s before caseworker picks it up`);
   sleep(10);
 
   // ── Phase 2: Wait for case to appear in CW (async GAS→CW via SNS/SQS) ──────
-  console.log(`[VU=${__VU}] Phase 2: Polling CW for case (timeout=${CASE_POLL_TIMEOUT_S}s interval=${CASE_POLL_INTERVAL_S}s)`);
+  // console.log(`[VU=${__VU}] Phase 2: Polling CW for case (timeout=${CASE_POLL_TIMEOUT_S}s interval=${CASE_POLL_INTERVAL_S}s)`);
   const caseId = waitForCase(clientRef);
   if (!caseId) {
     console.error(`[VU=${__VU}] FAILED at Phase 2: Case never appeared in CW for clientRef=${clientRef}`);
     return;
   }
-  console.log(`[VU=${__VU}] Phase 2 complete: caseId=${caseId}`);
+  // console.log(`[VU=${__VU}] Phase 2 complete: caseId=${caseId}`);
 
   // ── Phase 3: Open case ───────────────────────────────────────────────────────
-  console.log(`[VU=${__VU}] Phase 3: Opening case ${caseId}`);
+  // console.log(`[VU=${__VU}] Phase 3: Opening case ${caseId}`);
   logStep('GetCase', http.get(`${CW_FRONTEND_URL}/cases/${caseId}`, {
     headers: cwBrowserHeaders(),
     tags: { name: 'GetCase' },
@@ -578,7 +576,7 @@ export default function () {
   sleep(2);
 
   // ── Phase 4: Assign case to caseworker ──────────────────────────────────────
-  console.log(`[VU=${__VU}] Phase 4: Assigning case ${caseId} to user ${ASSIGNED_USER_ID}`);
+  // console.log(`[VU=${__VU}] Phase 4: Assigning case ${caseId} to user ${ASSIGNED_USER_ID}`);
   const assignUrl = `${CW_FRONTEND_URL}/cases/assign-user?caseId=${caseId}`;
 
   logStep('GetAssignUser', http.get(assignUrl, {
@@ -609,7 +607,7 @@ export default function () {
   sleep(3);
 
   // ── Phase 5: Start review ────────────────────────────────────────────────────
-  console.log(`[VU=${__VU}] Phase 5: Starting review for case ${caseId}`);
+  // console.log(`[VU=${__VU}] Phase 5: Starting review for case ${caseId}`);
   const startReviewRes = http.post(
     `${CW_FRONTEND_URL}/cases/${caseId}/stage/outcome`,
     'actionCode=ACTION_START_REVIEW',
@@ -624,7 +622,7 @@ export default function () {
     console.error(`[VU=${__VU}] FAILED: ACTION_START_REVIEW returned ${startReviewRes.status} (expected 302) — action not accepted`);
     return;
   }
-  console.log(`[VU=${__VU}] Phase 5 complete: ACTION_START_REVIEW accepted`);
+  // console.log(`[VU=${__VU}] Phase 5 complete: ACTION_START_REVIEW accepted`);
   sleep(3);
 
   logStep('GetCaseAfterStartReview', http.get(`${CW_FRONTEND_URL}/cases/${caseId}`, {
@@ -634,7 +632,7 @@ export default function () {
   sleep(3);
 
   // ── Phase 6: Approve application ─────────────────────────────────────────────
-  console.log(`[VU=${__VU}] Phase 6: Approving application for case ${caseId}`);
+  // console.log(`[VU=${__VU}] Phase 6: Approving application for case ${caseId}`);
   const approveRes = http.post(
     `${CW_FRONTEND_URL}/cases/${caseId}/stage/outcome`,
     'actionCode=ACTION_APPROVE_APPLICATION&ACTION_RETURN_TO_CUSTOMER-comment=',
@@ -659,13 +657,13 @@ export default function () {
   // ── Phase 7: Agreement delivery task ─────────────────────────────────────────
   // Wait for GAS to create the agreement and CW to auto-transition from
   // STATUS_AGREEMENT_GENERATING → STATUS_AGREEMENT_READY_FOR_APPLICANT
-  console.log(`[VU=${__VU}] Phase 7: Waiting for agreement to be ready in CW (async GAS→CW event)`);
+  // console.log(`[VU=${__VU}] Phase 7: Waiting for agreement to be ready in CW (async GAS→CW event)`);
   if (!waitForAgreementReady(caseId)) {
     console.error(`[VU=${__VU}] FAILED at Phase 7: Agreement never became ready for case ${caseId}`);
     return;
   }
 
-  console.log(`[VU=${__VU}] Phase 7: Completing agreement delivery task for case ${caseId}`);
+  // console.log(`[VU=${__VU}] Phase 7: Completing agreement delivery task for case ${caseId}`);
   const taskGroup = 'TASK_GROUP_AGREEMENT_PREPARATION';
   const task = 'TASK_AGREEMENT_DELIVERY_TO_APPLICANT';
   const taskUrl = `${CW_FRONTEND_URL}/cases/${caseId}/tasks/${taskGroup}/${task}`;
@@ -698,7 +696,7 @@ export default function () {
   sleep(2);
 
   // ── Phase 8: Confirm agreement sent ──────────────────────────────────────────
-  console.log(`[VU=${__VU}] Phase 8: Confirming agreement sent for case ${caseId}`);
+  // console.log(`[VU=${__VU}] Phase 8: Confirming agreement sent for case ${caseId}`);
   const confirmSentRes = http.post(
     `${CW_FRONTEND_URL}/cases/${caseId}/stage/outcome`,
     'actionCode=ACTION_CONFIRM_AGREEMENT_SENT&ACTION_CONFIRM_AGREEMENT_SENT-comment=' + encodeURIComponent('Agreement ready for applicant'),
@@ -721,7 +719,7 @@ export default function () {
   sleep(2);
 
   // ── Phase 9: Browse case tabs ─────────────────────────────────────────────────
-  console.log(`[VU=${__VU}] Phase 9: Browsing case tabs for case ${caseId}`);
+  // console.log(`[VU=${__VU}] Phase 9: Browsing case tabs for case ${caseId}`);
 
   http.get(`${CW_FRONTEND_URL}/cases/${caseId}/case-details`, { headers: cwBrowserHeaders(), tags: { name: 'GetCaseDetails' } });
   sleep(2);
@@ -733,7 +731,7 @@ export default function () {
   sleep(1);
 
   // ── Phase 10: Accept agreement ────────────────────────────────────────────────
-  console.log(`[VU=${__VU}] Phase 10: Accepting WMP agreement for clientRef=${clientRef}`);
+  // console.log(`[VU=${__VU}] Phase 10: Accepting WMP agreement for clientRef=${clientRef}`);
 
   // Ensure agreement exists in GAS (idempotent — returns existing if CW already created it)
   const agreementNumber = createOrGetTestAgreement(clientRef, applicant);
@@ -755,14 +753,14 @@ export default function () {
     if (result) {
       accepted = true;
     } else if (attempt === 1) {
-      console.log(`[VU=${__VU}] AcceptAgreement attempt 1 failed — re-fetching ETag and retrying`);
+      // console.log(`[VU=${__VU}] AcceptAgreement attempt 1 failed — re-fetching ETag and retrying`);
       sleep(2);
     }
   }
   sleep(2);
 
   // ── Phase 11: CRM record task ─────────────────────────────────────────────────
-  console.log(`[VU=${__VU}] Phase 11: Completing CRM record task for case ${caseId}`);
+  // console.log(`[VU=${__VU}] Phase 11: Completing CRM record task for case ${caseId}`);
   const crmTaskGroup = 'TASK_GROUP_CRM_RECORD';
   const crmTask = 'TASK_CRM_RECORD_CREATION';
   const crmTaskUrl = `${CW_FRONTEND_URL}/cases/${caseId}/tasks/${crmTaskGroup}/${crmTask}`;
@@ -795,7 +793,7 @@ export default function () {
   sleep(2);
 
   // ── Phase 12: Forward to FC ───────────────────────────────────────────────────
-  console.log(`[VU=${__VU}] Phase 12: ACTION_FORWARD_TO_FC for case ${caseId}`);
+  // console.log(`[VU=${__VU}] Phase 12: ACTION_FORWARD_TO_FC for case ${caseId}`);
   const forwardToFcRes = http.post(
     `${CW_FRONTEND_URL}/cases/${caseId}/stage/outcome`,
     'actionCode=ACTION_FORWARD_TO_FC&ACTION_FORWARD_TO_FC-comment=' + encodeURIComponent('Agreement accepted and forestry commission has been notified'),
@@ -818,7 +816,7 @@ export default function () {
   sleep(2);
 
   // ── Phase 13: FC review task ──────────────────────────────────────────────────
-  console.log(`[VU=${__VU}] Phase 13: Completing FC review task for case ${caseId}`);
+  // console.log(`[VU=${__VU}] Phase 13: Completing FC review task for case ${caseId}`);
   const fcTaskGroup = 'TASK_GROUP_FC_REVIEW';
   const fcTask = 'TASK_FC_REVIEW_OUTCOME';
   const fcTaskUrl = `${CW_FRONTEND_URL}/cases/${caseId}/tasks/${fcTaskGroup}/${fcTask}`;
@@ -851,7 +849,7 @@ export default function () {
   sleep(2);
 
   // ── Phase 14: Approve FC review ───────────────────────────────────────────────
-  console.log(`[VU=${__VU}] Phase 14: ACTION_APPROVE_FC_REVIEW for case ${caseId}`);
+  // console.log(`[VU=${__VU}] Phase 14: ACTION_APPROVE_FC_REVIEW for case ${caseId}`);
   const approveFcRes = http.post(
     `${CW_FRONTEND_URL}/cases/${caseId}/stage/outcome`,
     'actionCode=ACTION_APPROVE_FC_REVIEW&ACTION_APPROVE_FC_REVIEW-comment=' + encodeURIComponent('Forestry Commission review approved'),
@@ -868,7 +866,7 @@ export default function () {
   sleep(2);
 
   // ── Phase 15: Browse final case tabs ──────────────────────────────────────────
-  console.log(`[VU=${__VU}] Phase 15: Browsing final tabs for case ${caseId}`);
+  // console.log(`[VU=${__VU}] Phase 15: Browsing final tabs for case ${caseId}`);
   logStep('GetCaseAgreements', http.get(`${CW_FRONTEND_URL}/cases/${caseId}/agreements`, {
     headers: cwBrowserHeaders(),
     tags: { name: 'GetCaseAgreements' },
@@ -882,7 +880,7 @@ export default function () {
   sleep(1);
 
   // ── Phase 16: Claim prep tasks ───────────────────────────────────────────────
-  console.log(`[VU=${__VU}] Phase 16: Completing claim prep tasks for case ${caseId}`);
+  // console.log(`[VU=${__VU}] Phase 16: Completing claim prep tasks for case ${caseId}`);
   const claimTaskGroup = 'TASK_GROUP_CLAIM_PREP';
 
   const eligibleAreaTaskUrl = `${CW_FRONTEND_URL}/cases/${caseId}/tasks/${claimTaskGroup}/TASK_RECORD_ELIGIBLE_AREA`;
@@ -942,7 +940,7 @@ export default function () {
   sleep(2);
 
   // ── Phase 17: Claim prep complete ────────────────────────────────────────────
-  console.log(`[VU=${__VU}] Phase 17: ACTION_CLAIM_PREP_COMPLETE for case ${caseId}`);
+  // console.log(`[VU=${__VU}] Phase 17: ACTION_CLAIM_PREP_COMPLETE for case ${caseId}`);
   const claimPrepCompleteRes = http.post(
     `${CW_FRONTEND_URL}/cases/${caseId}/stage/outcome`,
     'actionCode=ACTION_CLAIM_PREP_COMPLETE',

@@ -88,11 +88,9 @@ export const options = {
     frps_full_journey: {
       executor: 'ramping-vus',
       startVUs: 0,
-      stages: [
-        { duration: '5m',  target: 5 },
-        { duration: '50m', target: 5 },
-        { duration: '5m',  target: 0 },
-      ],
+      stages: __ENV.K6_QUICK_RUN
+        ? [{ duration: '1m', target: 2 }, { duration: '3m', target: 2 }, { duration: '1m', target: 0 }]
+        : [{ duration: '5m', target: 5 }, { duration: '50m', target: 5 }, { duration: '5m', target: 0 }],
     },
   },
   thresholds: {
@@ -167,11 +165,11 @@ const cwFormHeaders = (referer) => ({
 
 function logStep(label, res, fullBody) {
   const location = res.headers['Location'] ? ` → ${res.headers['Location']}` : '';
-  console.log(`[VU=${__VU}] ${label} | status=${res.status}${location}`);
+  // console.log(`[VU=${__VU}] ${label} | status=${res.status}${location}`);
   if (res.body && res.body.length > 0) {
     const limit = fullBody ? res.body.length : 500;
     const snippet = res.body.length > limit ? res.body.substring(0, limit) + '...(truncated)' : res.body;
-    console.log(`[VU=${__VU}] ${label} | body=${snippet}`);
+    // console.log(`[VU=${__VU}] ${label} | body=${snippet}`);
   }
 }
 
@@ -283,7 +281,7 @@ function submitApplication(clientRef, applicant) {
   });
 
   const url = `${GAS_URL}/grants/frps-private-beta/applications`;
-  console.log(`[VU=${__VU}] POST ${url} | clientRef=${clientRef}`);
+  // console.log(`[VU=${__VU}] POST ${url} | clientRef=${clientRef}`);
 
   const res = http.post(url, payload, {
     headers: gasHeaders(),
@@ -305,7 +303,7 @@ function waitForCase(clientRef) {
   const url = `${CW_FRONTEND_URL}/cases?search=${clientRef}`;
   const caseIdPattern = /\/cases\/([a-f0-9]{24})/;
 
-  console.log(`[VU=${__VU}] Polling ${url} every ${CASE_POLL_INTERVAL_S}s (timeout=${CASE_POLL_TIMEOUT_S}s)`);
+  // console.log(`[VU=${__VU}] Polling ${url} every ${CASE_POLL_INTERVAL_S}s (timeout=${CASE_POLL_TIMEOUT_S}s)`);
 
   while (Date.now() < deadline) {
     const res = http.get(url, {
@@ -314,7 +312,7 @@ function waitForCase(clientRef) {
       tags: { name: 'PollCaseSearch' },
     });
 
-    console.log(`[VU=${__VU}] PollCaseSearch status=${res.status} url=${res.url}`);
+    // console.log(`[VU=${__VU}] PollCaseSearch status=${res.status} url=${res.url}`);
 
     // Detect session expiry — redirected to Microsoft login
     if (res.url && res.url.indexOf('login.microsoftonline.com') !== -1) {
@@ -325,11 +323,11 @@ function waitForCase(clientRef) {
     if (res.status === 200) {
       const match = res.body.match(caseIdPattern);
       if (match) {
-        console.log(`[VU=${__VU}] Found case [clientRef=${clientRef}] → caseId=${match[1]}`);
+        // console.log(`[VU=${__VU}] Found case [clientRef=${clientRef}] → caseId=${match[1]}`);
         return match[1];
       }
       const snippet = res.body.length > 800 ? res.body.substring(0, 800) : res.body;
-      console.log(`[VU=${__VU}] No caseId yet. Snippet: ${snippet}`);
+      // console.log(`[VU=${__VU}] No caseId yet. Snippet: ${snippet}`);
     } else {
       console.warn(`[VU=${__VU}] Unexpected status=${res.status} body=${res.body.substring(0, 300)}`);
     }
@@ -347,7 +345,7 @@ function waitForCase(clientRef) {
  * Completes a MANUAL_REVIEW_TASKS task with ACCEPTED outcome.
  */
 function completeManualTask(caseId, task, comment) {
-  console.log(`[VU=${__VU}] completeManualTask: MANUAL_REVIEW_TASKS/${task}`);
+  // console.log(`[VU=${__VU}] completeManualTask: MANUAL_REVIEW_TASKS/${task}`);
   const taskUrl = `${CW_FRONTEND_URL}/cases/${caseId}/tasks/MANUAL_REVIEW_TASKS/${task}`;
 
   logStep('GetTask_' + task, http.get(taskUrl, {
@@ -375,7 +373,7 @@ function completeManualTask(caseId, task, comment) {
  * Completes a DRAFT_AGREEMENT_REVIEW_TASKS task with CONFIRM outcome.
  */
 function completeAgreementTask(caseId, task, comment) {
-  console.log(`[VU=${__VU}] completeAgreementTask: DRAFT_AGREEMENT_REVIEW_TASKS/${task}`);
+  // console.log(`[VU=${__VU}] completeAgreementTask: DRAFT_AGREEMENT_REVIEW_TASKS/${task}`);
   const taskUrl = `${CW_FRONTEND_URL}/cases/${caseId}/tasks/DRAFT_AGREEMENT_REVIEW_TASKS/${task}`;
 
   logStep('GetTask_' + task, http.get(taskUrl, {
@@ -416,31 +414,31 @@ export default function () {
   const clientRef = `frps-perf-${runId}-${__VU}-${__ITER}`;
 
   console.log(`[VU=${__VU}] === Starting FRPS full journey v2 | clientRef=${clientRef} ===`);
-  console.log(`[VU=${__VU}] GAS_URL=${GAS_URL} CW_FRONTEND_URL=${CW_FRONTEND_URL}`);
-  console.log(`[VU=${__VU}] Session (first 60 chars): ${sessionValue ? sessionValue.substring(0, 60) : 'MISSING'}...`);
+  // console.log(`[VU=${__VU}] GAS_URL=${GAS_URL} CW_FRONTEND_URL=${CW_FRONTEND_URL}`);
+  // console.log(`[VU=${__VU}] Session (first 60 chars): ${sessionValue ? sessionValue.substring(0, 60) : 'MISSING'}...`);
 
   // ── Phase 1: Submit application to GAS ──────────────────────────────────────
   if (!submitApplication(clientRef, applicant)) {
     console.error(`[VU=${__VU}] FAILED at Phase 1: GAS application submission`);
     return;
   }
-  console.log(`[VU=${__VU}] Phase 1 complete: application submitted clientRef=${clientRef}`);
+  // console.log(`[VU=${__VU}] Phase 1 complete: application submitted clientRef=${clientRef}`);
 
   // Simulate application sitting in the queue before a caseworker picks it up
-  console.log(`[VU=${__VU}] Think time: application submitted — waiting 10s before caseworker picks it up`);
+  // console.log(`[VU=${__VU}] Think time: application submitted — waiting 10s before caseworker picks it up`);
   sleep(10);
 
   // ── Phase 2: Wait for case to appear in CW (async GAS→CW via SNS/SQS) ──────
-  console.log(`[VU=${__VU}] Phase 2: Polling CW for case (timeout=${CASE_POLL_TIMEOUT_S}s interval=${CASE_POLL_INTERVAL_S}s)`);
+  // console.log(`[VU=${__VU}] Phase 2: Polling CW for case (timeout=${CASE_POLL_TIMEOUT_S}s interval=${CASE_POLL_INTERVAL_S}s)`);
   const caseId = waitForCase(clientRef);
   if (!caseId) {
     console.error(`[VU=${__VU}] FAILED at Phase 2: Case never appeared in CW for clientRef=${clientRef}`);
     return;
   }
-  console.log(`[VU=${__VU}] Phase 2 complete: caseId=${caseId}`);
+  // console.log(`[VU=${__VU}] Phase 2 complete: caseId=${caseId}`);
 
   // ── Phase 3: Open case ───────────────────────────────────────────────────────
-  console.log(`[VU=${__VU}] Phase 3: Opening case ${caseId}`);
+  // console.log(`[VU=${__VU}] Phase 3: Opening case ${caseId}`);
   logStep('GetCase', http.get(`${CW_FRONTEND_URL}/cases/${caseId}`, {
     headers: cwBrowserHeaders(),
     tags: { name: 'GetCase' },
@@ -448,7 +446,7 @@ export default function () {
   sleep(2);
 
   // ── Phase 4: Assign case to caseworker ──────────────────────────────────────
-  console.log(`[VU=${__VU}] Phase 4: Assigning case ${caseId} to user ${ASSIGNED_USER_ID}`);
+  // console.log(`[VU=${__VU}] Phase 4: Assigning case ${caseId} to user ${ASSIGNED_USER_ID}`);
   const assignUrl = `${CW_FRONTEND_URL}/cases/assign-user?caseId=${caseId}`;
 
   logStep('GetAssignUser', http.get(assignUrl, {
@@ -479,7 +477,7 @@ export default function () {
   sleep(3);
 
   // ── Phase 5: Start review ────────────────────────────────────────────────────
-  console.log(`[VU=${__VU}] Phase 5: Starting review for case ${caseId}`);
+  // console.log(`[VU=${__VU}] Phase 5: Starting review for case ${caseId}`);
   const startReviewRes = http.post(
     `${CW_FRONTEND_URL}/cases/${caseId}/stage/outcome`,
     'actionCode=START_REVIEW',
@@ -494,7 +492,7 @@ export default function () {
     console.error(`[VU=${__VU}] FAILED: START_REVIEW returned ${startReviewRes.status} (expected 302) — action not accepted`);
     return;
   }
-  console.log(`[VU=${__VU}] Phase 5 complete: START_REVIEW accepted`);
+  // console.log(`[VU=${__VU}] Phase 5 complete: START_REVIEW accepted`);
   sleep(3);
 
   logStep('GetCaseAfterStartReview', http.get(`${CW_FRONTEND_URL}/cases/${caseId}`, {
@@ -504,7 +502,7 @@ export default function () {
   sleep(3);
 
   // ── Phase 6: Manual review tasks ─────────────────────────────────────────────
-  console.log(`[VU=${__VU}] Phase 6: Completing manual review tasks for case ${caseId}`);
+  // console.log(`[VU=${__VU}] Phase 6: Completing manual review tasks for case ${caseId}`);
 
   completeManualTask(caseId, 'CHECK_CUSTOMER_DETAILS', 'Check customer details');
   sleep(3);
@@ -532,7 +530,7 @@ export default function () {
   sleep(2);
 
   // ── Phase 7: Approve application ─────────────────────────────────────────────
-  console.log(`[VU=${__VU}] Phase 7: Approving application for case ${caseId}`);
+  // console.log(`[VU=${__VU}] Phase 7: Approving application for case ${caseId}`);
   const approveRes = http.post(
     `${CW_FRONTEND_URL}/cases/${caseId}/stage/outcome`,
     'actionCode=APPROVE_APPLICATION&APPROVE_APPLICATION-comment=Approve+the+application+after+completing+all+tasks&REJECT_APPLICATION-comment=&PUT_ON_HOLD-comment=&RETURN_TO_CUSTOMER-comment=&WITHDRAW_APPLICATION-comment=',
@@ -556,10 +554,10 @@ export default function () {
 
   // ── Phase 8: Draft agreement review tasks ─────────────────────────────────────
   // Agreement has been generated — simulate it sitting there before caseworker reviews it
-  console.log(`[VU=${__VU}] Think time: agreement generated — waiting 10s before caseworker reviews it`);
+  // console.log(`[VU=${__VU}] Think time: agreement generated — waiting 10s before caseworker reviews it`);
   sleep(10);
 
-  console.log(`[VU=${__VU}] Phase 8: Completing draft agreement review tasks for case ${caseId}`);
+  // console.log(`[VU=${__VU}] Phase 8: Completing draft agreement review tasks for case ${caseId}`);
 
   completeAgreementTask(caseId, 'REVIEW_OFFER_DOCUMENT', 'Check funding agreement');
   sleep(3);
@@ -572,7 +570,7 @@ export default function () {
   sleep(2);
 
   // ── Phase 9: Agreement sent ───────────────────────────────────────────────────
-  console.log(`[VU=${__VU}] Phase 9: Sending agreement for case ${caseId}`);
+  // console.log(`[VU=${__VU}] Phase 9: Sending agreement for case ${caseId}`);
   const agreementSentRes = http.post(
     `${CW_FRONTEND_URL}/cases/${caseId}/stage/outcome`,
     'actionCode=AGREEMENT_SENT&REJECT_APPLICATION-comment=&RETURN_TO_CUSTOMER-comment=&WITHDRAW_APPLICATION-comment=',
@@ -595,7 +593,7 @@ export default function () {
   sleep(2);
 
   // ── Phase 10: Browse case tabs ────────────────────────────────────────────────
-  console.log(`[VU=${__VU}] Phase 10: Browsing case tabs for case ${caseId}`);
+  // console.log(`[VU=${__VU}] Phase 10: Browsing case tabs for case ${caseId}`);
 
   http.get(`${CW_FRONTEND_URL}/cases/${caseId}/case-details`, { headers: cwBrowserHeaders(), tags: { name: 'GetCaseDetails' } });
   sleep(2);

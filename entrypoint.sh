@@ -21,6 +21,14 @@ if [ -z "${GAS_BEARER_TOKEN}" ]; then
   exit 1
 fi
 
+# Write applicant data from CDP secret
+if [ -z "${FRPS_APPLICANTS_JSON}" ]; then
+  echo "ERROR: FRPS_APPLICANTS_JSON is required"
+  exit 1
+fi
+echo "${FRPS_APPLICANTS_JSON}" | base64 -d > /app/src/data/frps-applicants.json
+echo "Applicant data written from secret"
+
 # Generate CW session cookies before running k6 scenarios
 if [ -z "${ENTRA_ID_WRITER_USER}" ] || [ -z "${ENTRA_ID_USER_PASSWORD}" ]; then
   echo "ERROR: ENTRA_ID_WRITER_USER and ENTRA_ID_USER_PASSWORD are required"

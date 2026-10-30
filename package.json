@@ -4,12 +4,19 @@
   "description": "K6 performance tests for farming grants core services",
   "type": "module",
   "scripts": {
+    "seed-data": "node scripts/seed-data.js",
     "generate-cookies": "node scripts/generate-session-cookies.js",
-    "generate-cookies:frps": "OUTPUT_FILE=src/data/frps-session-cookies.csv node scripts/generate-session-cookies.js",
-    "generate-cookies:wmp": "OUTPUT_FILE=src/data/wmp-session-cookies.csv node scripts/generate-session-cookies.js",
+    "k6:frps": "dotenv -e .env -- k6 run src/scenarios/frps-full-journey-v2.js",
+    "k6:frps:quick": "dotenv -e .env -- k6 run --env K6_QUICK_RUN=true src/scenarios/frps-full-journey-v2.js",
+    "k6:wmp": "dotenv -e .env -- k6 run src/scenarios/wmp-full-journey.js",
+    "k6:wmp:quick": "dotenv -e .env -- k6 run --env K6_QUICK_RUN=true src/scenarios/wmp-full-journey.js",
     "test": "node --experimental-vm-modules --test test/*.test.js"
   },
   "dependencies": {
+    "dotenv": "^18.0.9",
     "playwright": "^1.49.0"
+  },
+  "devDependencies": {
+    "dotenv-cli": "^11.1.0"
   }
 }
